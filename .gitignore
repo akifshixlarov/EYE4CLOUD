@@ -1,0 +1,26 @@
+# --- Sirlər / mühit ---
+.env
+.env.local
+.streamlit/secrets.toml
+
+# --- Skan nəticələri (subscription ID, resurs adları, tapıntılar) ---
+results/
+logs/
+
+# --- Asılılıqlar ---
+venv/
+.venv/
+env/
+requirements.lock.txt
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# --- Redaktor / alət ---
+.vscode/
+.idea/
+*.swp
+.DS_Store

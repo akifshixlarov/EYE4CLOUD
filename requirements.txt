@@ -1,0 +1,12 @@
+azure-identity>=1.17.0
+azure-mgmt-storage>=21.2.0
+azure-mgmt-network>=25.4.0
+azure-mgmt-keyvault>=10.3.0
+azure-mgmt-compute>=33.0.0
+# app.py `width="stretch"` API-sindən istifadə edir (köhnə `use_container_width`
+# əvəzinə) - bu floor həmin API-nin test edildiyi versiyadır
+streamlit>=1.63.0
+pandas>=2.2.0
+python-dotenv>=1.0.1
+requests>=2.32.0
+streamlit-authenticator>=0.4.2

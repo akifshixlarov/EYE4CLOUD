@@ -1,0 +1,22 @@
+# Sirlər - konteyner imicinə heç vaxt düşməməlidir
+.env
+.env.local
+.streamlit/secrets.toml
+
+# Host-un venv-i imicə kopyalanmamalıdır (457MB + platformaya bağlıdır,
+# imic öz asılılıqlarını requirements.txt-dən qurur)
+venv/
+.venv/
+env/
+
+# Lokal data
+results/
+logs/
+
+# Python / alət
+__pycache__/
+*.py[cod]
+.git/
+.gitignore
+.vscode/
+.idea/
