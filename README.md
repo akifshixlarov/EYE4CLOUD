@@ -102,9 +102,54 @@ streamlit run app.py
 
 Brauzerdə `http://localhost:8501` açılacaq.
 
-**CVE/Dependency check üçün əlavə addım:** OSV.dev sorğusu dəqiq versiya
-tələb edir, `requirements.txt`-də isə `>=` işlədilib. Ona görə bu check-in
-işləməsi üçün əvvəlcə dəqiq versiyalı fayl yaradılmalıdır:
+### 3. Connect from Dashboard (v2 — .env olmadan birbaşa qoşulma)
+
+Dashboard-un sol panelindəki **"Connect to Azure"** bölməsindən Service Principal məlumatlarını birbaşa daxil edə bilərsiniz:
+- **Tenant ID**
+- **Client ID** (App ID)
+- **Client Secret** (`type="password"` ilə daxil edilir, ekranda maskalanır)
+- **Subscription ID(s)** (vergüllə ayrılmış bir və ya bir neçə subscription)
+
+#### Təhlükəsizlik Zəmanətləri (Security Guarantees):
+- **Yalnız Yaddaşda (In-Memory Only):** Daxil edilən sirlər yalnız aktiv Streamlit brauzer sessiyasında (`st.session_state`) saxlanılır.
+- **Sıfır Disk İzi:** Heç vaxt diskə, `.env` faylına, `results/` qovluğuna, server log-larına, JSON ixracına və ya URL parametrlərinə yazılmır.
+- **Xəta Maskalanması:** Azure SDK və ya autentifikasiya xətası baş verdikdə xəta mətnlərində heç vaxt credential detalları əks olunmur.
+- **Bir Kliklə Təmizləmə:** "🔌 Əlaqəni kəs / Təmizlə" düyməsi credential-ları dərhal sessiyadan silir.
+- **Prioritet:** Dashboard daxiletməsi > Sistem `.env` faylı > Aktiv `az login` sessiyası.
+- **Təhlükəsizlik Qaydası:** Həmişə yalnız **Reader** (oxuma) hüququ olan Service Principal istifadə edin (mümkünsə test abunəliyində).
+
+### 4. Demo Mode (Təhlükəsiz Təqdimat Rejimi)
+
+Heç bir Azure hesabı və ya credential olmadan dashboard-un bütün imkanlarını nümayiş etdirmək üçün:
+- Sol paneldəki **"🎮 Demo Mode (Safe Preview)"** açarını aktiv edin.
+- Realistik saxta (mock) resurslar və tapıntılar dərhal yüklənir.
+- Public link və ya müştəri təqdimatları zamanı real bulud mühitinə təhlükə yaratmadan istifadə üçün idealdır.
+
+### 5. Public Mode (`PUBLIC_MODE=true` — İctimai Çoxistifadəçili Rejim)
+
+Aləti ictimaiyyətə açıq (məsələn, internet üzərindən tanımadığınız ziyarətçilərin öz Service Principal-larını daxil edə bilməsi üçün) yerləşdirdikdə `.env` faylında və ya konteyner parametrində `PUBLIC_MODE=true` mütləq təyin edilməlidir.
+
+Bu rejimdə tətbiq edilən təhlükəsizlik baryerləri:
+- **Server Credential-larının Bloklanması:** Serverdəki `.env` faylındakı `AZURE_*` parametrləri və `az login` icazələri tamamilə bloklanır; ziyarətçi skanları üçün heç vaxt serverin öz kimliyi istifadə olunmur.
+- **Tam Sessiya İzolyasiyası (Memory-Only):** Ziyarətçilərin daxil etdiyi Tenant ID, Client ID, Client Secret və skan nəticələri yalnız həmin sessiyanın RAM-ında (`st.session_state`) saxlanılır. Diskə (`results/`, `logs/` və s.) heç bir fayl yazılmır. Əvvəlki ziyarətçilərin köhnə skan faylları heç kimə göstərilmir.
+- **Sirrlərin Avtomatik Təmizlənməsi:**
+  - 15 dəqiqə hərəkətsizlikdən sonra bütün credential-lar və daxiletmə sahələri (`input_*`) avtomatik silinir.
+  - Skan tamamlandıqda credential-lar dərhal silinir ("Sessiyada saxla" seçilmədikdə).
+  - Disconnect düyməsi bütün mətn buferlərini təmizləyir.
+- **Sərt Giriş Validasiyası:** Tenant ID, Client ID və Subscription ID-lər ciddi GUID regex-i (`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`) ilə yoxlanılır. Bir sessiyada maksimum 3 subscription-a icazə verilir.
+- **Anti-Abuse və Rate Limiting:**
+  - Hər sessiya üçün 10 dəqiqə ərzində maksimum 5 əlaqə testi və 3 skan limiti.
+  - Eyni anda bütün server üzrə paralel icra oluna bilən skan sayı qlobal semafor ilə məhdudlaşdırılır (maksimum 2 paralel skan).
+  - Dashboard parolu aktivdirsə, 3 uğursuz cəhddən sonra eksponensial bloklanma (lockout) tətbiq olunur.
+- **Məlumat Sızmalarının Qarşısının Alınması:**
+  - Bütün xəta mesajları və loqlar `redact()` funksiyasından keçirilir; secret, Bearer token və JWT-lər maskalanır.
+  - Azure SDK, urllib3 və MSAL loq səviyyələri `WARNING`-ə qaldırılmışdır (HTTP body-lər loglanmır).
+  - Streamlit konfiqurasiyasında `client.showErrorDetails = "none"` və `server.enableXsrfProtection = true` aktivdir.
+
+
+### 6. CVE/Dependency check üçün əlavə addım
+
+OSV.dev sorğusu dəqiq versiya tələb edir, `requirements.txt`-də isə `>=` işlədilib. Ona görə bu check-in işləməsi üçün əvvəlcə dəqiq versiyalı fayl yaradılmalıdır:
 
 ```bash
 pip freeze > requirements.lock.txt
@@ -112,7 +157,7 @@ pip freeze > requirements.lock.txt
 
 Bu fayl yoxdursa, dependency check sakitcə 0 tapıntı qaytarır (xəta vermir).
 
-### 3. Docker ilə işə salma
+### 7. Docker ilə işə salma
 
 ```bash
 docker build -t azure-scanner .
