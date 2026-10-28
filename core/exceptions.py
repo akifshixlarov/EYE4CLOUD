@@ -1,13 +1,13 @@
 """
 core/exceptions.py
 
-"Accepted Risk" mexanizmi: istifadəçi bir tapıntını bilərəkdən qəbul edib
-score hesablamasından çıxara bilər.
+"Accepted Risk" mechanism: the user can deliberately accept a finding and
+exclude it from the score calculation.
 
-Public Mode dəstəyi:
-- Açıq rejimdə (və ya sessiya mağazası verildikdə) qəbul edilmiş risklər
-  YALNIZ sessiyanın yaddaşında (st.session_state) saxlanılır.
-- Diskdəki `results/accepted_risks.json` faylı public rejimdə oxunmur və yazılmır.
+Public Mode support:
+- In public mode (or when a session store is given), accepted risks are
+  kept ONLY in the session's memory (st.session_state).
+- The on-disk `results/accepted_risks.json` file is never read or written in public mode.
 """
 
 import json
@@ -20,7 +20,7 @@ EXCEPTIONS_FILE = Path(__file__).resolve().parent.parent / "results" / "accepted
 
 
 def _finding_key(finding: dict) -> tuple:
-    """(category, resource, check) tapıntını unikal tanıyır."""
+    """Uniquely identifies a finding by (category, resource, check)."""
     return (finding["category"], finding["resource"], finding["check"])
 
 
@@ -44,7 +44,7 @@ def _save(records: list[dict], store: list[dict] | None = None) -> None:
         store.extend(records)
         return
     if is_public_mode():
-        # Public rejimdə heç vaxt diskə yazılmır
+        # Never written to disk in public mode
         return
 
     EXCEPTIONS_FILE.parent.mkdir(exist_ok=True)
@@ -53,12 +53,12 @@ def _save(records: list[dict], store: list[dict] | None = None) -> None:
 
 
 def list_accepted_risks(store: list[dict] | None = None) -> list[dict]:
-    """Bütün qəbul edilmiş riskləri qaytarır."""
+    """Returns all accepted risks."""
     return list(_load(store))
 
 
 def accepted_keys_set(store: list[dict] | None = None) -> set:
-    """(category, resource, check) tuple dəstini qaytarır."""
+    """Returns the set of (category, resource, check) tuples."""
     return {_finding_key(r) for r in _load(store)}
 
 
@@ -68,7 +68,7 @@ def accept_risk(
     accepted_by: str = "visitor",
     store: list[dict] | None = None,
 ) -> None:
-    """Bir tapıntını qəbul edilmiş risk kimi qeyd edir."""
+    """Marks a finding as an accepted risk."""
     records = _load(store)
     key = _finding_key(finding)
 
@@ -93,7 +93,7 @@ def revoke_acceptance(
     check: str,
     store: list[dict] | None = None,
 ) -> None:
-    """Bir qəbul edilmiş riski ləğv edir."""
+    """Revokes an accepted risk."""
     records = _load(store)
     key = (category, resource, check)
     updated = [r for r in records if _finding_key(r) != key]
@@ -105,7 +105,7 @@ def is_accepted(
     accepted_keys: set | None = None,
     store: list[dict] | None = None,
 ) -> bool:
-    """Bir tapıntının qəbul edilib-edilmədiyini yoxlayır."""
+    """Checks whether a finding has been accepted."""
     if accepted_keys is None:
         accepted_keys = accepted_keys_set(store)
     return _finding_key(finding) in accepted_keys

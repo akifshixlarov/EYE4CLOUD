@@ -1,15 +1,15 @@
 """
 checks/dependency_checks.py
 
-Layihənin öz Python asılılıqlarında (requirements.lock.txt) OSV.dev
-(Open Source Vulnerabilities) bazasına görə bilinən CVE/GHSA-ları axtarır.
-Bu, "öz kitabxanalarında CVE yoxlaması" (SCA - Software Composition
-Analysis) hissəsidir, Azure resurslarına deyil, layihənin özünə baxır.
+Looks up known CVEs/GHSAs in the project's own Python dependencies
+(requirements.lock.txt) using the OSV.dev (Open Source Vulnerabilities) database.
+This is the "CVE check of its own libraries" (SCA - Software Composition
+Analysis) part; it looks at the project itself, not at Azure resources.
 
-Niyə requirements.lock.txt: OSV sorğusu dəqiq versiya tələb edir, amma
-requirements.txt-də `>=` işlədilib. İstifadəçi əvvəlcə bunu çalışdırmalıdır:
+Why requirements.lock.txt: OSV queries need exact versions, but
+requirements.txt uses `>=`. The user should run this first:
     pip freeze > requirements.lock.txt
-Bu fayl yoxdursa, check sakitcə boş siyahı qaytarır - xəta atmır.
+If this file is missing, the check quietly returns an empty list - it does not raise.
 """
 
 import re
@@ -29,15 +29,15 @@ def _finding(package: str, version: str, vuln_id: str, summary: str, severity: s
         "check": "known_vulnerability",
         "issue": f"{vuln_id}: {summary}",
         "severity": severity,
-        # CIS Microsoft Azure Foundations Benchmark bulud infrastrukturuna
-        # fokuslanib, tetbiq asililiqlarinin (SCA) CVE-lerini ehate etmir -
-        # ona gore burada tetbiq oluna bilecek CIS Azure ID-si yoxdur
-        "compliance": "N/A (CIS Azure Foundations-un əhatə dairəsindən kənar)",
+        # CIS Microsoft Azure Foundations Benchmark focuses on cloud infrastructure
+        # and does not cover CVEs in application dependencies (SCA) -
+        # so there is no applicable CIS Azure ID here
+        "compliance": "N/A (outside the scope of CIS Azure Foundations)",
     }
 
 
 def _parse_lock_file(lock_path: Path) -> list[tuple[str, str]]:
-    """`paket==versiya` sətirlərini (paket, versiya) cütlüklərinə çevirir."""
+    """Turns `package==version` lines into (package, version) pairs."""
     packages = []
     for line in lock_path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
@@ -51,10 +51,10 @@ def _parse_lock_file(lock_path: Path) -> list[tuple[str, str]]:
 
 def _map_severity(vuln: dict) -> str:
     """
-    OSV yazıları severity-ni müxtəlif formatlarda verə bilir (CVSS vektor
-    sətri və ya database_specific.severity). Sadəlik üçün yalnız
-    database_specific.severity oxunur; o da yoxdursa, ehtiyatlı yanaşıb
-    Medium təyin edilir (naməlum severity-ni Low saymaq risklidir).
+    OSV entries can report severity in different formats (a CVSS vector
+    string or database_specific.severity). For simplicity only
+    database_specific.severity is read; if that is missing too, we play it safe
+    and assign Medium (treating an unknown severity as Low is risky).
     """
     db_severity = (vuln.get("database_specific") or {}).get("severity", "").upper()
     if db_severity in ("CRITICAL", "HIGH"):
@@ -75,9 +75,9 @@ def _query_osv(package: str, version: str) -> list[dict]:
 
 def run_all_dependency_checks() -> list[dict]:
     """
-    requirements.lock.txt yoxdursa (hələ `pip freeze > requirements.lock.txt`
-    icra edilməyibsə), boş siyahı qaytarır. OSV.dev-ə hər hansı paket üçün
-    şəbəkə xətası olarsa, yalnız o paket atlanır - bütün skan dayanmır.
+    If requirements.lock.txt is missing (`pip freeze > requirements.lock.txt`
+    has not been run yet), returns an empty list. If there is a network error
+    talking to OSV.dev for some package, only that package is skipped - the whole scan does not stop.
     """
     if not LOCK_FILE.exists():
         return []

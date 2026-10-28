@@ -1,14 +1,14 @@
 """
 checks/keyvault_checks.py
 
-Key Vault-larda 2 check:
-  1) Soft Delete aktivdirmi?
-  2) Purge Protection aktivdirmi?
+2 checks on Key Vaults:
+  1) Is Soft Delete enabled?
+  2) Is Purge Protection enabled?
 
-Qeyd: vaults.list_by_subscription() yalniz qismi melumat (id, name, location)
-qaytarir - tam properties (enable_soft_delete, enable_purge_protection) ucun
-her vault ucun ayrica vaults.get() cagirmaq lazimdir. Bu, Storage/NSG-den
-ferqli bir SDK davranisidir, deye buraya qeyd yazdim.
+Note: vaults.list_by_subscription() returns only partial data (id, name, location)
+- the full properties (enable_soft_delete, enable_purge_protection) require
+a separate vaults.get() call per vault. This SDK behaviour differs from
+Storage/NSG, hence this note.
 """
 
 from core.auth import AzureClients
@@ -34,8 +34,8 @@ def check_key_vaults(clients: AzureClients) -> list[dict]:
         resource_group = vault_summary.id.split("/")[4]
         vault_name = vault_summary.name
 
-        # list_by_subscription qismi melumat qaytardigi ucun tam properties
-        # lazimdirsa ayrica get() cagiririq
+        # list_by_subscription returns partial data, so when full properties
+        # are needed we call get() separately
         vault = clients.keyvault.vaults.get(resource_group, vault_name)
         props = vault.properties
 
@@ -48,8 +48,8 @@ def check_key_vaults(clients: AzureClients) -> list[dict]:
                       "certificates cannot be recovered",
                 severity="High",
                 # CIS Microsoft Azure Foundations Benchmark v2.1.0 - "8.5 Ensure
-                # the Key Vault is Recoverable" soft delete + purge protection-i
-                # bir control kimi qiymetlendirir, ona gore ikisi de eyni ID-ni daşıyır
+                # the Key Vault is Recoverable" treats soft delete + purge protection
+                # as one control, so both carry the same ID
                 compliance="CIS Azure 8.5",
             ))
 

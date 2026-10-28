@@ -1,1 +1,1 @@
-"""ui/ — Streamlit dashboard komponentləri."""
+"""ui/ — Streamlit dashboard components."""
