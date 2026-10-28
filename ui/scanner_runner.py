@@ -29,9 +29,8 @@ from checks.storage_checks import run_all_storage_checks
 from checks.nsg_checks import run_all_nsg_checks
 from checks.keyvault_checks import run_all_keyvault_checks
 from checks.vm_checks import run_all_vm_checks
-from checks.dependency_checks import run_all_dependency_checks
-from core.notifications import notify_scan_complete
-from core.history import RESULTS_DIR
+from core.notifications import build_summary, notify_scan_complete
+from core.history import RESULTS_DIR, load_scan
 
 CHECK_DEFINITIONS = [
     ("Storage Accounts", run_all_storage_checks),
@@ -70,7 +69,7 @@ def execute_parallel_scan(
 
         with st.status("🔍 Scanning the Azure environment for security issues...", expanded=True) as status_box:
             all_findings = []
-            total_steps = len(subscription_ids) * len(CHECK_DEFINITIONS) + 1
+            total_steps = len(subscription_ids) * len(CHECK_DEFINITIONS)
             progress_bar = st.progress(0, text="Starting scan...")
             completed_steps = 0
 
@@ -102,19 +101,6 @@ def execute_parallel_scan(
                             logging.exception("Error during check '%s'", check_name)
                             st.write(f"&nbsp;&nbsp;⚠️ **{check_name}**: Skipped due to an error ({type(e).__name__})")
 
-            # Dependency check (CVE)
-            st.write("📦 Checking **Dependencies (PyPI / OSV.dev)** for vulnerabilities...")
-            try:
-                dep_findings = run_all_dependency_checks()
-                for f in dep_findings:
-                    f["subscription_id"] = "N/A"
-                all_findings.extend(dep_findings)
-                st.write(f"&nbsp;&nbsp;✔️ **Dependencies**: {len(dep_findings)} findings")
-            except Exception:
-                logging.exception("Dependency check error")
-                st.write("&nbsp;&nbsp;⚠️ **Dependencies**: An error occurred during the check")
-
-            completed_steps += 1
             progress_bar.progress(100, text="Scan complete!")
             status_box.update(label="✅ Scan completed successfully!", state="complete", expanded=False)
 
@@ -134,13 +120,14 @@ def execute_parallel_scan(
                 st.session_state["session_scans"].append(result)
         else:
             # Non-public (local) mode
+            previous = session_scans_store[-1] if session_scans_store else None
             save_session_scan(result, session_id)
             if session_scans_store is not None:
                 session_scans_store.append(result)
             try:
-                notify_scan_complete(result)
+                notify_scan_complete(build_summary(result, previous))
             except Exception:
-                pass
+                logging.exception("Notification was not sent")
 
         # 4. Automatic cleanup after the scan (when keep_connected=False)
         if not keep_connected:
@@ -173,28 +160,34 @@ def list_session_scans(session_id: str, session_scans_store: list[dict] | None =
     """
     Returns the list of scans belonging to the session.
     In public mode, or when a session store exists, never falls back to legacy shared files.
+    In local mode the background scheduler's scans (scan_scheduled_*.json) are
+    added too, named by file name so the sidebar delete button works on them.
     """
-    # 1. Scans in session memory
     if session_scans_store:
+        # 1. Scans in session memory
         res = []
         for idx, s in enumerate(session_scans_store, 1):
             time_str = s["scan_time"][:16].replace("T", " ")
             name = f"scan_{idx}_{time_str}"
             res.append((name, s))
-        return res
-
-    if is_public_mode():
+    elif is_public_mode():
         # No shared on-disk files in public mode
         return []
+    else:
+        # 2. Read from disk in non-public (local) mode
+        res = _load_scan_files(f"scan_{session_id}_*.json")
 
-    # 2. Read from disk in non-public (local) mode
-    if not RESULTS_DIR.exists():
-        return []
+    if is_public_mode():
+        return res
 
-    from core.history import load_scan
-    session_files = sorted(RESULTS_DIR.glob(f"scan_{session_id}_*.json"))
+    res += _load_scan_files("scan_scheduled_*.json")
+    res.sort(key=lambda item: item[1].get("scan_time", ""))
+    return res
+
+
+def _load_scan_files(pattern: str) -> list[tuple[str, dict]]:
     res = []
-    for p in session_files:
+    for p in sorted(RESULTS_DIR.glob(pattern)):
         try:
             res.append((p.name, load_scan(p)))
         except Exception:

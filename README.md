@@ -18,7 +18,6 @@ trend/diff comparison between scans.
 | 6 | Is the minimum TLS version below 1.2? | Storage Account | Medium | 3.15 |
 | 7 | Are disks encrypted with a Customer Managed Key? | Virtual Machine | Medium | 7.2 |
 | 8 | Is the VM attached directly to a public IP? | Virtual Machine | Medium | N/A |
-| 9 | Do the project's own dependencies have known CVEs? (OSV.dev) | Dependency | High/Medium/Low | N/A (out of scope) |
 
 Each finding comes with concrete remediation advice (and, where possible, a
 ready-to-use `az cli` command). A user can mark a finding as "accepted risk"
@@ -49,25 +48,26 @@ azure-scanner/
 │   ├── history.py         # scan history: list/load/delete files
 │   ├── remediation.py     # "how to fix" for every check + ready az cli command
 │   ├── exceptions.py      # "Accepted Risk" - accepted findings
-│   ├── notifications.py   # Teams/Slack webhook notification (optional)
+│   ├── notifications.py   # Telegram / Teams / Slack notification (optional)
+│   ├── scheduler.py       # background scheduled scans configured from the dashboard
+│   ├── settings.py        # dashboard-saved settings (results/settings.json)
 │   ├── security.py        # public mode, input validation, redaction, rate limits
 │   └── dashboard_auth.py  # password protection for the dashboard (optional)
 ├── checks/
 │   ├── storage_checks.py
 │   ├── nsg_checks.py
 │   ├── keyvault_checks.py
-│   ├── vm_checks.py           # disk CMK encryption, direct public IP
-│   └── dependency_checks.py   # CVE check via OSV.dev (requirements.lock.txt)
-├── ui/                    # Streamlit components (connect panel, charts, export, demo data)
+│   └── vm_checks.py           # disk CMK encryption, direct public IP
+├── ui/                    # Streamlit components (connect panel, automation panel, charts, export, demo data)
 ├── scripts/
 │   ├── scheduled_scan.py  # headless scan (Task Scheduler / cron / CI)
 │   └── hash_password.py   # creates a bcrypt hash for the dashboard password
 ├── results/               # every scan is written here as scan_<timestamp>.json
-│                          # + accepted_risks.json
+│                          # + accepted_risks.json, settings.json
 ├── logs/                  # log of scheduled scans
 ├── .streamlit/config.toml # custom theme
-└── app.py                 # Streamlit UI (5 tabs: Overview/Findings/History/
-                           #                Dependencies/Accepted Risks)
+└── app.py                 # Streamlit UI (4 tabs: Overview/Findings/History/
+                           #                Accepted Risks)
 ```
 
 Data flow: `checks/*.py` → `core/scanner.py` (merges, saves) →
@@ -120,7 +120,7 @@ write/change operations, it only reads.
 
 #### Security guarantees
 - **In-memory only:** credentials and tokens are kept only in the active Streamlit browser session (`st.session_state`).
-- **Zero disk footprint:** never written to disk, the `.env` file, the `results/` folder, server logs, JSON exports or URL parameters.
+- **Zero disk footprint:** Azure credentials and tokens are never written to disk, the `.env` file, the `results/` folder, server logs, JSON exports or URL parameters. (Exception, local mode only: a Telegram bot token you save in the Automation panel is stored in `results/settings.json` — see [Notifications](#notifications-telegram--teams--slack-optional).)
 - **Error masking:** when an Azure SDK or authentication error occurs, error messages never include credential details.
 - **One-click wipe:** the "🔌 Disconnect / Clear" button removes credentials from the session immediately.
 - **Priority:** dashboard input > system `.env` file > active `az login` session.
@@ -163,18 +163,7 @@ Security barriers in this mode:
   - Azure SDK, urllib3 and MSAL log levels are raised to `WARNING` (HTTP bodies are not logged).
   - The Streamlit config sets `client.showErrorDetails = "none"` and `server.enableXsrfProtection = true`.
 
-### 6. Extra step for the CVE/Dependency check
-
-OSV.dev queries need exact versions, while `requirements.txt` uses `>=`. So for
-this check to work, first create a file with pinned versions:
-
-```bash
-pip freeze > requirements.lock.txt
-```
-
-If this file is missing, the dependency check quietly returns 0 findings (no error).
-
-### 7. Run with Docker
+### 6. Run with Docker
 
 ```bash
 docker build -t azure-scanner .
@@ -191,6 +180,17 @@ To test just the backend without the UI:
 ```bash
 python -m core.scanner
 ```
+
+## Running the tests
+
+```bash
+python -m pytest -q
+```
+
+`tests/test_credentials.py` covers session isolation, public mode and secret
+redaction; `tests/test_automation.py` covers the scheduler, Telegram
+notifications and settings-file permissions. No Azure or Telegram access is
+needed — the SDK and HTTP calls are mocked.
 
 ## Scanning several subscriptions (optional)
 
@@ -242,10 +242,25 @@ If both are empty, the dashboard opens without a password (default behaviour).
 A plain password (`DASHBOARD_PASSWORD`) also works, but then bcrypt is
 recomputed on every page refresh — the hash variant is both faster and safer.
 
-## Webhook notification (optional)
+## Notifications: Telegram / Teams / Slack (optional)
 
-When a scan finishes, a short summary (posture score, total findings,
-new/resolved findings) can be sent to Teams or Slack. Set the URL in `.env`:
+When a scan finishes (manual or scheduled), a short summary (posture score,
+total findings, new/resolved findings) is sent to every configured channel.
+
+### Telegram (from the dashboard)
+
+1. Create a bot with [@BotFather](https://t.me/BotFather) and copy its token.
+2. Send your bot any message (or add it to a group/channel), then get the chat
+   ID (e.g. from @userinfobot; group IDs start with `-100`).
+3. In the sidebar open **🤖 Automation → 📨 Telegram notifications**, turn it on,
+   enter the token and chat ID, click **📤 Send test**, then **💾 Save**.
+
+The token is saved in `results/settings.json` (git-ignored, `chmod 600`) and is
+never shown back in the browser — leave the field empty to keep the saved one.
+`TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` in `.env` also work (e.g. for the
+cron script); dashboard settings take precedence when enabled.
+
+### Teams / Slack (from `.env`)
 
 ```bash
 TEAMS_WEBHOOK_URL=https://outlook.office.com/webhook/...
@@ -253,11 +268,32 @@ TEAMS_WEBHOOK_URL=https://outlook.office.com/webhook/...
 SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
 ```
 
-If both are empty, the notification step is skipped entirely — scan behaviour
+If nothing is configured, the notification step is skipped entirely — scan behaviour
 does not change. If a network error occurs, the notification is quietly
 dropped; the scan result has already been written to `results/`.
 
 ## Scheduled (automatic) scan
+
+### From the dashboard
+
+In the sidebar open **🤖 Automation → ⏰ Scheduled scan**, turn it on, pick
+**Daily at a fixed time (UTC)** or **Every N hours**, optionally enter
+Subscription ID(s), and click **💾 Save**. The next/last run and its status are
+shown in the same panel; results appear in the scan history as
+`scan_scheduled_<timestamp>.json`.
+
+- Scheduled scans run with the **server's** credentials (`.env` Service
+  Principal, or the `az login` session of the user running Streamlit) —
+  dashboard sign-ins are session-only and are never stored for background use.
+- The scheduler runs inside the Streamlit server process: it starts with the
+  first page load after the server starts, and only runs while the server is up.
+  A run missed while the server was down happens once on the next start.
+- Not available with `PUBLIC_MODE=true`.
+- **Security:** anyone who can open the dashboard can change the schedule and
+  the Telegram target. If the app is reachable from other machines, enable
+  [dashboard password protection](#dashboard-password-protection-optional).
+
+### From the command line (cron / Task Scheduler / CI)
 
 `scripts/scheduled_scan.py` runs a full scan without the UI, writes the result
 to `results/` and appends a one-line summary to `logs/scheduled_scan.log`.

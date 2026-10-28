@@ -91,7 +91,6 @@ def test_two_simulated_sessions_isolation(monkeypatch):
 
     with patch("ui.scanner_runner.CHECK_DEFINITIONS", mock_definitions), \
          patch("ui.scanner_runner.get_clients") as mock_get_clients, \
-         patch("ui.scanner_runner.run_all_dependency_checks", return_value=[]), \
          patch("streamlit.status") as mock_status, \
          patch("streamlit.progress") as mock_progress, \
          patch("streamlit.write"), \
