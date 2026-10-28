@@ -70,6 +70,48 @@ REMEDIATION = {
                    "--resource-group {resource_group} "
                    "--enable-purge-protection true",
     },
+    "sql_firewall_open_to_internet": {
+        "advice": "Delete the firewall rule that opens the server to every IP address and "
+                  "allow only specific trusted IPs/CIDRs (or use a Private Endpoint).",
+        "command": "az sql server firewall-rule delete --server {resource} "
+                   "--resource-group {resource_group} --name <rule-name>",
+    },
+    "sql_allow_azure_services": {
+        "advice": "Turn off 'Allow Azure services and resources to access this server' - it "
+                  "admits traffic from any Azure subscription, not only yours. Use VNet rules "
+                  "or Private Endpoints instead.",
+        "command": "az sql server firewall-rule delete --server {resource} "
+                   "--resource-group {resource_group} --name AllowAllWindowsAzureIps",
+    },
+    "sql_public_network_access": {
+        "advice": "Disable public network access and connect through a Private Endpoint.",
+        "command": "az sql server update --name {resource} "
+                   "--resource-group {resource_group} --enable-public-network false",
+    },
+    "sql_min_tls": {
+        "advice": "Require TLS 1.2 or newer for client connections.",
+        "command": "az sql server update --name {resource} "
+                   "--resource-group {resource_group} --minimal-tls-version 1.2",
+    },
+    "sql_no_entra_admin": {
+        "advice": "Configure a Microsoft Entra administrator (preferably a group) so logins "
+                  "use central identity management and MFA.",
+        "command": "az sql server ad-admin create --server-name {resource} "
+                   "--resource-group {resource_group} "
+                   "--display-name <group-name> --object-id <group-object-id>",
+    },
+    "sql_auditing_disabled": {
+        "advice": "Enable server-level auditing and send the logs to a Storage Account or "
+                  "Log Analytics workspace.",
+        "command": "az sql server audit-policy update --name {resource} "
+                   "--resource-group {resource_group} --state Enabled "
+                   "--lats Enabled --lawri <log-analytics-workspace-resource-id>",
+    },
+    "sql_tde_disabled": {
+        "advice": "Enable Transparent Data Encryption on the database.",
+        "command": "az sql db tde set --server {server} --database {database} "
+                   "--resource-group {resource_group} --status Enabled",
+    },
 }
 
 DEFAULT_ADVICE = "No specific remediation advice has been written for this check yet."
@@ -90,7 +132,11 @@ def get_remediation(finding: dict) -> dict:
 
     resource = finding.get("resource", "<resource>")
     resource_group = finding.get("resource_group", "<resource-group>")
+    # Child resources are named "parent/child" (e.g. SQL "server/db")
+    server, _, database = resource.partition("/")
 
-    command = entry["command"].format(resource=resource, resource_group=resource_group)
+    command = entry["command"].format(
+        resource=resource, resource_group=resource_group, server=server, database=database
+    )
 
     return {"advice": entry["advice"], "command": command}
