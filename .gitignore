@@ -1,13 +1,13 @@
-# --- Sirlər / mühit ---
+# --- Secrets / environment ---
 .env
 .env.local
 .streamlit/secrets.toml
 
-# --- Skan nəticələri (subscription ID, resurs adları, tapıntılar) ---
+# --- Scan results (subscription IDs, resource names, findings) ---
 results/
 logs/
 
-# --- Asılılıqlar ---
+# --- Dependencies ---
 venv/
 .venv/
 env/
@@ -19,7 +19,7 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 
-# --- Redaktor / alət ---
+# --- Editor / tooling ---
 .vscode/
 .idea/
 *.swp

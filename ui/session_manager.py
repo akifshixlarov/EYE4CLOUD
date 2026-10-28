@@ -1,7 +1,7 @@
 """
 ui/session_manager.py
 
-Sessiya məlumatlarını, Demo rejimi və skan tarixçəsini koordinasiya edən köməkçi modul.
+Helper module that coordinates session data, Demo mode and scan history.
 """
 
 from pathlib import Path
@@ -20,8 +20,8 @@ def get_available_scans(
     session_scans_store: list[dict] | None = None,
 ) -> list[tuple[str, dict]]:
     """
-    (ekran_adi, scan_dict) cütlərinin xronoloji siyahısını qaytarır.
-    Demo rejimində saxta skanları, normal rejimdə isə sessiya yaddaşındakı skanları yükləyir.
+    Returns a chronological list of (display_name, scan_dict) pairs.
+    Loads fake scans in Demo mode, otherwise the scans in session memory.
     """
     if is_demo:
         demo_list = get_demo_scans()
@@ -32,13 +32,13 @@ def get_available_scans(
             result.append((name, s))
         return result
 
-    # Sessiyaya aid olan skanlar
+    # Scans belonging to the session
     return list_session_scans(session_id, session_scans_store=session_scans_store)
 
 
 def compute_scan_diff(scans: list[dict]) -> dict | None:
     """
-    Siyahıdakı son iki skan arasında müqayisə aparır:
+    Compares the last two scans in the list:
     - new_findings
     - resolved_findings
     - score_change
@@ -70,7 +70,7 @@ def compute_scan_diff(scans: list[dict]) -> dict | None:
 
 
 def compute_score_history(scans: list[dict]) -> list[dict]:
-    """Skanlar üzrə posture score tarixçəsi."""
+    """Posture score history across scans."""
     history = []
     for s in scans:
         score = calculate_scores(s.get("findings", []))["overall"]

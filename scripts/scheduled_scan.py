@@ -1,23 +1,23 @@
 """
 scripts/scheduled_scan.py
 
-UI-siz (headless) skan - Windows Task Scheduler, cron ve ya GitHub Actions
-ucun. Butun mentiq core/scanner.py-dadir; bu skript yalnizca onu cagirir,
-neticeni logs/scheduled_scan.log-a yazir ve ekrana qisa xulase verir.
+Headless (UI-less) scan - for Windows Task Scheduler, cron or GitHub Actions.
+All the logic lives in core/scanner.py; this script only calls it,
+writes the result to logs/scheduled_scan.log and prints a short summary.
 
-Istifade:
+Usage:
     python scripts/scheduled_scan.py
 
-Exit kodu: ugurlu skanda 0, xetada 1 - beleliklə scheduler/CI skanin
-ugursuz oldugunu goreri bilir.
+Exit code: 0 on a successful scan, 1 on error - so the scheduler/CI can
+tell that the scan failed.
 """
 
 import logging
 import sys
 from pathlib import Path
 
-# `python scripts/scheduled_scan.py` kimi birbasa cagirilanda layihe koku
-# sys.path-da olmur - elave edirik ki, `core` paketi tapilsin
+# When run directly as `python scripts/scheduled_scan.py`, the project root
+# is not on sys.path - we add it so the `core` package can be found
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -28,7 +28,7 @@ LOG_FILE = PROJECT_ROOT / "logs" / "scheduled_scan.log"
 
 
 def _setup_logging() -> None:
-    """Hem fayla (tarixce ucun), hem ekrana (CI log-u ucun) yazir."""
+    """Writes both to a file (for history) and to the screen (for the CI log)."""
     LOG_FILE.parent.mkdir(exist_ok=True)
     logging.basicConfig(
         level=logging.INFO,
@@ -39,8 +39,8 @@ def _setup_logging() -> None:
         ],
     )
 
-    # Azure SDK INFO seviyyesinde her HTTP sorgu/cavabini tam dump edir -
-    # zamanlanmis skanda log faylini sisirdiyi ucun WARNING-e endiririk
+    # At INFO level the Azure SDK dumps every HTTP request/response in full -
+    # that bloats the log file of scheduled scans, so we lower it to WARNING
     logging.getLogger("azure").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
@@ -51,14 +51,14 @@ def main() -> int:
     try:
         result = run_scan()
     except Exception:
-        logging.exception("Skan ugursuz oldu")
+        logging.exception("Scan failed")
         return 1
 
     scores = calculate_scores(result["findings"])
     severity = scores["findings_by_severity"]
 
     logging.info(
-        "Skan tamamlandi: score=%s/100, tapinti=%s (High=%s, Medium=%s, Low=%s)",
+        "Scan completed: score=%s/100, findings=%s (High=%s, Medium=%s, Low=%s)",
         scores["overall"],
         result["total_findings"],
         severity["High"],

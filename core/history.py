@@ -1,11 +1,11 @@
 """
 core/history.py
 
-Skan tarixçəsini idarə edir: results/ qovluğundakı scan_*.json fayllarını
-sadalamaq, birini yükləmək, silmək, hamısını təmizləmək.
+Manages scan history: the scan_*.json files in the results/ folder -
+listing, loading one, deleting one, clearing all.
 
-core/diff.py analiz (müqayisə/trend) üçün bu modulu istifadə edir - fayl
-sisteminə birbaşa toxunan yer yalnız buradadır.
+core/diff.py uses this module for analysis (comparison/trend) - this is
+the only place that touches the file system directly.
 """
 
 import json
@@ -15,24 +15,24 @@ RESULTS_DIR = Path(__file__).resolve().parent.parent / "results"
 
 
 def list_scan_files() -> list[Path]:
-    """results/ qovluğundakı bütün scan fayllarını xronoloji sırada qaytarır."""
+    """Returns all scan files in the results/ folder in chronological order."""
     if not RESULTS_DIR.exists():
         return []
     return sorted(RESULTS_DIR.glob("scan_*.json"))
 
 
 def load_scan(file_path: Path) -> dict:
-    """Bir scan_*.json faylını oxuyub dict kimi qaytarır."""
+    """Reads a scan_*.json file and returns it as a dict."""
     with open(file_path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def delete_scan(file_path: Path) -> None:
-    """Tək bir skan faylını silir. Fayl artıq yoxdursa səssizcə keçir."""
+    """Deletes a single scan file. Silently passes if the file no longer exists."""
     Path(file_path).unlink(missing_ok=True)
 
 
 def clear_history() -> None:
-    """results/ qovluğundakı bütün skan fayllarını silir."""
+    """Deletes all scan files in the results/ folder."""
     for file_path in list_scan_files():
         file_path.unlink()

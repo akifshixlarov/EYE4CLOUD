@@ -1,7 +1,7 @@
 """
 ui/charts.py
 
-Plotly vizualizasiyaları:
+Plotly visualizations:
 - Posture score gauge
 - Severity donut chart
 - Category bar chart
@@ -13,13 +13,13 @@ import pandas as pd
 
 
 def get_gauge_chart(score: int) -> go.Figure:
-    """Posture Score üçün dəqiq və müasir gauge qrafiki."""
+    """Precise, modern gauge chart for the Posture Score."""
     if score >= 80:
-        bar_color = "#10b981"  # Yaşıl
+        bar_color = "#10b981"  # green
     elif score >= 50:
-        bar_color = "#f59e0b"  # Sarı
+        bar_color = "#f59e0b"  # yellow
     else:
-        bar_color = "#ef4444"  # Qırmızı
+        bar_color = "#ef4444"  # red
 
     fig = go.Figure(
         go.Indicator(
@@ -56,17 +56,17 @@ def get_gauge_chart(score: int) -> go.Figure:
 
 
 def get_severity_donut(counts: dict) -> go.Figure:
-    """Təhlükə dərəcələrinə (High/Med/Low) görə donut qrafiki."""
+    """Donut chart by severity (High/Med/Low)."""
     labels = ["High", "Medium", "Low"]
     values = [counts.get("High", 0), counts.get("Medium", 0), counts.get("Low", 0)]
     colors = ["#ef4444", "#f59e0b", "#10b981"]
 
     total = sum(values)
     if total == 0:
-        # Boş hal
+        # Empty state
         fig = go.Figure(
             go.Pie(
-                labels=["Təmiz"],
+                labels=["Clean"],
                 values=[1],
                 hole=0.65,
                 marker=dict(colors=["#10b981"]),
@@ -105,7 +105,7 @@ def get_severity_donut(counts: dict) -> go.Figure:
 
 
 def get_category_bar(findings: list[dict]) -> go.Figure:
-    """Resurs kateqoriyalarına görə tapıntıların paylanması."""
+    """Distribution of findings by resource category."""
     if not findings:
         return go.Figure()
 
@@ -138,7 +138,7 @@ def get_category_bar(findings: list[dict]) -> go.Figure:
 
 
 def get_trend_chart(history: list[dict]) -> go.Figure:
-    """Bütün skanlar üzrə posture score trend xətti."""
+    """Posture score trend line across all scans."""
     if len(history) < 2:
         return go.Figure()
 
