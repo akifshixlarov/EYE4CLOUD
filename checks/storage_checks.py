@@ -1,25 +1,25 @@
 """
 checks/storage_checks.py
 
-Storage Account-lar uzerinde 3 check:
-  1) Public Blob Access aktivdirmi?
-  2) Secure Transfer (HTTPS-only) mecburidirmi?
-  3) Minimum TLS versiyasi 1.2-den asagidirmi?
+3 checks on Storage Accounts:
+  1) Is Public Blob Access enabled?
+  2) Is Secure Transfer (HTTPS-only) enforced?
+  3) Is the minimum TLS version below 1.2?
 
-Her funksiya AzureClients obyekti qebul edir ve tapinti dict-lerinin
-siyahisini qaytarir. Butun tapintilar eyni "shape"-de olur ki, sonradan
-scoring.py ve app.py bunlari asanliqla emal ede bilsin.
+Each function takes an AzureClients object and returns a list of finding
+dicts. All findings share the same "shape" so that later on
+scoring.py and app.py can process them easily.
 """
 
 from core.auth import AzureClients
 
-# TLS 1.2-den asagi versiyalar - Azure SDK bunlari bu setirlerle qaytarir
+# TLS versions below 1.2 - the Azure SDK returns them as these strings
 WEAK_TLS_VERSIONS = {"TLS1_0", "TLS1_1"}
 
 
 def _finding(resource_name: str, resource_group: str, check: str,
              issue: str, severity: str, compliance: str) -> dict:
-    """Butun check modullarinda eyni formati saxlamaq ucun kicik helper."""
+    """Small helper to keep the same format across all check modules."""
     return {
         "category": "Storage Account",
         "resource": resource_name,
@@ -33,18 +33,18 @@ def _finding(resource_name: str, resource_group: str, check: str,
 
 def check_public_blob_access(clients: AzureClients) -> list[dict]:
     """
-    Her Storage Account ucun allow_blob_public_access sahesini yoxlayir.
-    True (veya None -> Azure defaultu True qebul edir) olarsa, bu High
-    severity problemdir - hec kimin bilmeden public blob container
-    yaratmasi mumkundur.
+    Checks the allow_blob_public_access field of each Storage Account.
+    If True (or None -> Azure treats the default as True), this is a High
+    severity problem - anyone could create a public blob container
+    without noticing.
     """
     findings = []
 
     for account in clients.storage.storage_accounts.list():
-        resource_group = account.id.split("/")[4]  # ARM id-den RG-ni cixarmaq
+        resource_group = account.id.split("/")[4]  # extract the RG from the ARM id
         allow_public = account.allow_blob_public_access
 
-        # Azure-da bu deyer None gele bilir - o zaman servis defaultu tetbiq olunur (True)
+        # Azure may return None here - in that case the service default applies (True)
         if allow_public is None or allow_public is True:
             findings.append(_finding(
                 resource_name=account.name,
@@ -62,9 +62,9 @@ def check_public_blob_access(clients: AzureClients) -> list[dict]:
 
 def check_secure_transfer(clients: AzureClients) -> list[dict]:
     """
-    Her Storage Account ucun enable_https_traffic_only sahesini yoxlayir.
-    False olarsa, HTTP ile de elaqe qura bilerler - trafik acilmamis
-    kanalla getmis olur (Medium severity, cunki exploit ucun elave serait lazimdir).
+    Checks the enable_https_traffic_only field of each Storage Account.
+    If False, clients can also connect over HTTP - traffic travels over an
+    unencrypted channel (Medium severity, since exploiting it needs extra conditions).
     """
     findings = []
 
@@ -89,19 +89,19 @@ def check_secure_transfer(clients: AzureClients) -> list[dict]:
 
 def check_minimum_tls_version(clients: AzureClients) -> list[dict]:
     """
-    Her Storage Account ucun minimum_tls_version sahesini yoxlayir.
-    TLS 1.2-den asagi (TLS1_0 / TLS1_1) olarsa flag edilir - bu versiyalarin
-    bilinen zeiflikleri var. Deyer None gelerse, hesab kohne default
-    (TLS1_0) ile qalib demekdir, o da flag edilir.
+    Checks the minimum_tls_version field of each Storage Account.
+    Flagged if below TLS 1.2 (TLS1_0 / TLS1_1) - these versions have
+    known weaknesses. If the value is None, the account still uses the old default
+    (TLS1_0), which is flagged as well.
     """
     findings = []
 
     for account in clients.storage.storage_accounts.list():
         resource_group = account.id.split("/")[4]
 
-        # SDK bu sahe ucun enum qaytarir (MinimumTlsVersion.TLS1_0). O, str-den
-        # toreyib, deye muqayise isleyir, amma f-string-de "MinimumTlsVersion.TLS1_0"
-        # kimi cixir - ona gore acig deyeri gotururuk
+        # The SDK returns an enum for this field (MinimumTlsVersion.TLS1_0). It derives
+        # from str, so comparison works, but in an f-string it renders as "MinimumTlsVersion.TLS1_0"
+        # - so we take the plain value
         min_tls = getattr(account.minimum_tls_version, "value", account.minimum_tls_version)
 
         if min_tls in WEAK_TLS_VERSIONS or min_tls is None:
@@ -120,7 +120,7 @@ def check_minimum_tls_version(clients: AzureClients) -> list[dict]:
 
 
 def run_all_storage_checks(clients: AzureClients) -> list[dict]:
-    """storage_checks modulundaki butun check-leri bir siyahida birlesdirir."""
+    """Combines all checks in the storage_checks module into one list."""
     return (
         check_public_blob_access(clients)
         + check_secure_transfer(clients)

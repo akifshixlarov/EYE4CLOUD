@@ -1,20 +1,20 @@
 """
 core/auth.py
 
-Azure autentifikasiyası və SDK management client-lərinin yaradılması.
+Azure authentication and creation of SDK management clients.
 
-TƏHLÜKƏSİZLİK MƏNTİQİ:
-- Heç bir modul-səviyyəli qlobal dəyişən (global state) yoxdur.
-- Bütün credential-lar funksiyalara eksplisit parametr kimi ötürülür (`credentials: dict | None`).
-- Client və credential obyektləri sessiyalar arasında heç vaxt paylaşılmır.
-- PUBLIC_MODE=true olduqda server `.env` dəyərləri və `az cli` TAMAMİLƏ nəzərə alınmır.
+SECURITY LOGIC:
+- No module-level global variables (global state).
+- All credentials are passed to functions as explicit parameters (`credentials: dict | None`).
+- Client and credential objects are never shared between sessions.
+- With PUBLIC_MODE=true, server `.env` values and `az cli` are COMPLETELY ignored.
 """
 
 import os
 from dataclasses import dataclass
 
 from dotenv import load_dotenv
-from azure.identity import ClientSecretCredential, AzureCliCredential
+from azure.identity import ClientSecretCredential, AzureCliCredential, DeviceCodeCredential
 from azure.mgmt.storage import StorageManagementClient
 from azure.mgmt.network import NetworkManagementClient
 from azure.mgmt.keyvault import KeyVaultManagementClient
@@ -29,6 +29,9 @@ from core.security import is_public_mode, redact
 
 load_dotenv()
 
+ARM_SCOPE = "https://management.azure.com/.default"
+DEVICE_CODE_TIMEOUT_SECONDS = 300
+
 
 @dataclass
 class AzureClients:
@@ -40,7 +43,7 @@ class AzureClients:
 
 
 def has_env_credentials() -> bool:
-    """Environment variable (Service Principal) konfiqurasiya edilibmi?"""
+    """Are environment variable (Service Principal) credentials configured?"""
     if is_public_mode():
         return False
     return bool(
@@ -51,7 +54,7 @@ def has_env_credentials() -> bool:
 
 
 def get_credential_source(credentials: dict | None = None) -> str:
-    """Hazırda hansı credential mənbəyinin istifadə olunduğunu bildirir."""
+    """Reports which credential source is currently in use."""
     if credentials:
         return "dashboard"
     if is_public_mode():
@@ -63,11 +66,14 @@ def get_credential_source(credentials: dict | None = None) -> str:
 
 def _build_credential(credentials: dict | None = None):
     """
-    Credential obyekti qurur.
-    YALNIZ ötürülən credentials və ya (non-public rejimdə) server mühitindən istifadə edir.
+    Builds the credential object.
+    Uses ONLY the passed credentials or (in non-public mode) the server environment.
     """
-    # 1) Eksplisit sessiya məlumatı verilibsə
+    # 1) Explicit session data was provided
     if credentials and isinstance(credentials, dict):
+        # "Sign in with Microsoft" — an already authenticated DeviceCodeCredential
+        if credentials.get("credential") is not None:
+            return credentials["credential"]
         tenant_id = credentials.get("tenant_id")
         client_id = credentials.get("client_id")
         client_secret = credentials.get("client_secret")
@@ -78,14 +84,14 @@ def _build_credential(credentials: dict | None = None):
                 client_secret=client_secret,
             )
 
-    # 2) Public Mode aktivdirsə, server credential-ları qəti qadağandır
+    # 2) In Public Mode, server credentials are strictly forbidden
     if is_public_mode():
         raise PermissionError(
-            "Açıq (Public) rejimdə server credential-larının istifadəsi qadağandır. "
-            "Zəhmət olmasa Service Principal məlumatlarınızı daxil edin."
+            "Using server credentials is forbidden in Public mode. "
+            "Please sign in or enter your Service Principal details."
         )
 
-    # 3) Qeyri-ictimai (local) rejimdə .env fallback-i
+    # 3) .env fallback in non-public (local) mode
     tenant_id = os.getenv("AZURE_TENANT_ID")
     client_id = os.getenv("AZURE_CLIENT_ID")
     client_secret = os.getenv("AZURE_CLIENT_SECRET")
@@ -97,27 +103,41 @@ def _build_credential(credentials: dict | None = None):
             client_secret=client_secret,
         )
 
-    # 4) Qeyri-ictimai (local) rejimdə Azure CLI fallback-i
+    # 4) Azure CLI fallback in non-public (local) mode
     try:
         return AzureCliCredential()
     except Exception:
         raise EnvironmentError(
-            "Autentifikasiya üçün nə daxil edilmiş credential, nə Service "
-            "Principal (.env), nə də aktiv 'az login' sessiyası tapıldı."
+            "No credentials for authentication were found: no entered credentials, "
+            "no Service Principal (.env), and no active 'az login' session."
         )
 
 
+def sign_in_with_device_code(prompt_callback) -> DeviceCodeCredential:
+    """
+    Device code sign-in with a Microsoft account (no app registration required).
+    prompt_callback(verification_uri, user_code, expires_on) shows the code in the UI.
+    Blocks until the user finishes signing in; the token stays only in the credential object's memory.
+    """
+    credential = DeviceCodeCredential(
+        prompt_callback=prompt_callback,
+        timeout=DEVICE_CODE_TIMEOUT_SECONDS,
+    )
+    credential.authenticate(scopes=[ARM_SCOPE])
+    return credential
+
+
 def list_subscription_ids(credentials: dict | None = None) -> list[str]:
-    """Skan ediləcək subscription ID-lərinin siyahısı."""
+    """List of subscription IDs to scan."""
     if credentials and credentials.get("subscription_ids"):
         return credentials["subscription_ids"]
 
     if is_public_mode():
         raise PermissionError(
-            "Açıq rejimdə heç bir Subscription ID təqdim edilməyib."
+            "No Subscription ID was provided in public mode."
         )
 
-    # Qeyri-ictimai (local) fallback
+    # Non-public (local) fallback
     multi = os.getenv("AZURE_SUBSCRIPTION_IDS")
     if multi:
         ids = [s.strip() for s in multi.split(",") if s.strip()]
@@ -129,13 +149,13 @@ def list_subscription_ids(credentials: dict | None = None) -> list[str]:
         return [single]
 
     raise EnvironmentError(
-        "Subscription ID tapılmadı. Dashboard-dan daxil edin və ya "
-        ".env faylında AZURE_SUBSCRIPTION_ID təyin edin."
+        "Subscription ID not found. Enter it in the dashboard or "
+        "set AZURE_SUBSCRIPTION_ID in the .env file."
     )
 
 
 def get_clients(subscription_id: str | None = None, credentials: dict | None = None) -> AzureClients:
-    """Verilən subscription və credentials üçün izolə edilmiş SDK client-lərini qaytarır."""
+    """Returns isolated SDK clients for the given subscription and credentials."""
     if subscription_id is None:
         subscription_id = list_subscription_ids(credentials)[0]
 
@@ -152,8 +172,8 @@ def get_clients(subscription_id: str | None = None, credentials: dict | None = N
 
 def test_connection(subscription_id: str, credentials: dict | None = None) -> tuple[bool, str]:
     """
-    Zərərsiz read-only əlaqə testi.
-    Xəta mesajında heç vaxt credential detalları əks olunmur (redact edilir).
+    Harmless read-only connection test.
+    Error messages never include credential details (they are redacted).
     """
     secret = credentials.get("client_secret", "") if credentials else ""
     try:
@@ -161,16 +181,15 @@ def test_connection(subscription_id: str, credentials: dict | None = None) -> tu
         if ResourceManagementClient is not None:
             resource_client = ResourceManagementClient(credential, subscription_id)
             rg_list = list(resource_client.resource_groups.list())
-            return True, f"Bağlantı uğurlu! {len(rg_list)} resource group aşkarlandı."
+            return True, f"Connection successful! {len(rg_list)} resource groups found."
         else:
             storage_client = StorageManagementClient(credential, subscription_id)
             accounts = list(storage_client.storage_accounts.list())
-            return True, f"Bağlantı uğurlu! {len(accounts)} storage account oxundu."
+            return True, f"Connection successful! {len(accounts)} storage accounts read."
     except Exception as e:
         clean_err = redact(str(e), [secret])
-        # İstifadəçiyə yalnız təhlükəsiz ümumi mesaj veririk
+        # Only give the user a safe, generic message
         return False, (
-            "Azure-a qoşulmaq mümkün olmadı. Tenant ID, Client ID, "
-            "Client Secret və Subscription ID-ni yoxlayın. "
-            "Service Principal-ın Reader rolu olmalıdır."
+            "Could not connect to Azure. Check your sign-in details and "
+            "Subscription ID. The account needs the Reader role on the subscription."
         )

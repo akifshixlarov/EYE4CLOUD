@@ -1,19 +1,19 @@
 """
 checks/vm_checks.py
 
-Virtual Machine-ler uzerinde 2 check:
-  1) Disk-ler Customer Managed Key (CMK) ile sifrelenibmi?
-  2) VM birbasa public IP-ye baglidirmi?
+2 checks on Virtual Machines:
+  1) Are disks encrypted with a Customer Managed Key (CMK)?
+  2) Is the VM attached directly to a public IP?
 
-Qeyd (disk encryption): Azure managed disk-ler heminki platform-managed key
-(PMK) ile "at rest" sifrelenir - yeni "hec sifrelenmeyib" veziyyeti yoxdur.
-CIS Azure 7.2 mehz CMK isteyir, ona gore burada disk-e Disk Encryption Set
-(CMK) baglanib-baglanmadigini yoxlayiriq. Mehdudiyyet: bu usul Azure Disk
-Encryption (ADE, BitLocker/dm-crypt) ile sifrelenmis VM-i CMK saymir -
-ADE ayri mexanizmdir ve VM extension-larindan oxunmalidir.
+Note (disk encryption): Azure managed disks are always encrypted at rest with a
+platform-managed key (PMK) - so an "unencrypted" state does not exist.
+CIS Azure 7.2 specifically requires CMK, so here we check whether a Disk Encryption Set
+(CMK) is attached to the disk. Limitation: this method does not count a VM encrypted
+with Azure Disk Encryption (ADE, BitLocker/dm-crypt) as CMK -
+ADE is a separate mechanism and must be read from the VM extensions.
 
-Qeyd (public IP): VM obyekti yalniz NIC-lerin ID-sini verir, ona gore her
-NIC ucun network client-den ayrica sorgu gonderilir.
+Note (public IP): the VM object only provides NIC IDs, so a separate
+request is sent to the network client for each NIC.
 """
 
 from azure.core.exceptions import HttpResponseError
@@ -36,9 +36,9 @@ def _finding(vm_name: str, resource_group: str, check: str,
 
 def _managed_disks(vm) -> list[tuple[str, object]]:
     """
-    VM-in butun managed disk-lerini (ad, managed_disk obyekti) kimi qaytarir -
-    OS disk + data disk-ler. Managed olmayan (kohne "unmanaged") disk-ler
-    atlanir, cunki onlarda disk encryption set anlayisi yoxdur.
+    Returns all managed disks of the VM as (name, managed_disk object) -
+    OS disk + data disks. Non-managed (legacy "unmanaged") disks
+    are skipped, since the disk encryption set concept does not apply to them.
     """
     disks = []
     storage_profile = vm.storage_profile
@@ -56,8 +56,8 @@ def _managed_disks(vm) -> list[tuple[str, object]]:
 
 def check_disk_encryption(clients: AzureClients) -> list[dict]:
     """
-    Her VM-in disk-lerinde Disk Encryption Set (CMK) olub-olmadigini yoxlayir.
-    Bagli deyilse, disk yalniz platform-managed key ile sifrelenib demekdir.
+    Checks whether each VM's disks have a Disk Encryption Set (CMK).
+    If not attached, the disk is encrypted only with a platform-managed key.
     """
     findings = []
 
@@ -86,8 +86,8 @@ def check_disk_encryption(clients: AzureClients) -> list[dict]:
 
 def check_public_ip(clients: AzureClients) -> list[dict]:
     """
-    VM-in NIC-lerinden hec birinde public IP olmamalidir - birbasa internete
-    acilan VM hucum sethini genislendirir (Bastion/Load Balancer/NAT tovsiye olunur).
+    None of the VM's NICs should have a public IP - a VM exposed directly to the
+    internet widens the attack surface (Bastion/Load Balancer/NAT is recommended).
     """
     findings = []
 
@@ -96,7 +96,7 @@ def check_public_ip(clients: AzureClients) -> list[dict]:
         public_nics = []
 
         for nic_ref in (vm.network_profile.network_interfaces if vm.network_profile else []):
-            # nic_ref yalniz ARM id verir - tam obyekt ucun ayrica sorgu lazimdir
+            # nic_ref only gives the ARM id - a separate request is needed for the full object
             nic_rg = nic_ref.id.split("/")[4]
             nic_name = nic_ref.id.split("/")[-1]
             nic = clients.network.network_interfaces.get(nic_rg, nic_name)
@@ -116,8 +116,8 @@ def check_public_ip(clients: AzureClients) -> list[dict]:
                 issue=f"NIC(s) {', '.join(public_nics)} have a public IP - the VM is "
                       "directly reachable from the internet",
                 severity="Medium",
-                # CIS Azure Foundations bu veziyyeti ayrica control kimi saymir
-                compliance="N/A (CIS Azure Foundations-da birbaşa qarşılığı yoxdur)",
+                # CIS Azure Foundations does not count this as a separate control
+                compliance="N/A (no direct equivalent in CIS Azure Foundations)",
             ))
 
     return findings
@@ -125,9 +125,9 @@ def check_public_ip(clients: AzureClients) -> list[dict]:
 
 def run_all_vm_checks(clients: AzureClients) -> list[dict]:
     """
-    Subscription-da Microsoft.Compute provider-i qeydiyyatdan kecmeyibse
-    (VM hec vaxt yaradilmayibsa bu adi haldir) Azure xeta qaytarir - o zaman
-    VM check-leri sadece bos siyahi verir, butun skan dayanmir.
+    If the Microsoft.Compute provider is not registered in the subscription
+    (normal if no VM was ever created), Azure returns an error - in that case
+    the VM checks just return an empty list and the whole scan does not stop.
     """
     try:
         return check_disk_encryption(clients) + check_public_ip(clients)

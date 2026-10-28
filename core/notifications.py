@@ -1,12 +1,12 @@
 """
 core/notifications.py
 
-Skan bitdikden sonra Teams (ve ya Slack) webhook-una qisa xulase gonderir:
-posture score, umumi tapinti sayi, yeni/hell olunan tapinti sayi.
+Sends a short summary to a Teams (or Slack) webhook after the scan:
+posture score, total findings, new/resolved findings.
 
-Webhook URL-i .env-den oxunur (TEAMS_WEBHOOK_URL / SLACK_WEBHOOK_URL).
-Hec biri teyin edilmeyibse bildiris merhelesi tamamile atlanir - skan
-funksionalligi webhook-dan asili deyil.
+The webhook URL is read from .env (TEAMS_WEBHOOK_URL / SLACK_WEBHOOK_URL).
+If neither is set, the notification step is skipped entirely - scan
+functionality does not depend on the webhook.
 """
 
 import os
@@ -18,7 +18,7 @@ load_dotenv()
 
 TIMEOUT_SECONDS = 10
 
-# Score-a gore kart rengi (Teams MessageCard "themeColor" hex, "#"-siz)
+# Card colour by score (Teams MessageCard "themeColor" hex, without "#")
 _THEME_COLORS = {
     "good": "2EB886",
     "warning": "E3B341",
@@ -36,33 +36,33 @@ def _theme_color(score: int) -> str:
 
 def _facts(summary: dict) -> list[tuple[str, str]]:
     """
-    Bildirisde gosterilecek "ad: deyer" cutlukleri. Ilk skanda diff olmur -
-    o zaman yeni/hell olunan setirleri hec gosterilmir (None kimi gelir).
+    "name: value" pairs shown in the notification. There is no diff on the first scan -
+    in that case the new/resolved rows are not shown at all (they come as None).
     """
     facts = [
         ("Posture Score", f"{summary['score']}/100"),
-        ("Ümumi tapıntı", str(summary["total_findings"])),
+        ("Total findings", str(summary["total_findings"])),
         ("Subscription", summary["subscription_id"]),
     ]
 
     if summary.get("new_findings") is not None:
-        facts.append(("Yeni tapıntı", str(summary["new_findings"])))
-        facts.append(("Həll olunan", str(summary["resolved_findings"])))
+        facts.append(("New findings", str(summary["new_findings"])))
+        facts.append(("Resolved", str(summary["resolved_findings"])))
 
         change = summary["score_change"]
-        facts.append(("Score dəyişimi", f"+{change}" if change > 0 else str(change)))
+        facts.append(("Score change", f"+{change}" if change > 0 else str(change)))
 
     return facts
 
 
 def _teams_payload(summary: dict) -> dict:
-    """Teams "MessageCard" (Office 365 connector) formati."""
+    """Teams "MessageCard" (Office 365 connector) format."""
     return {
         "@type": "MessageCard",
         "@context": "https://schema.org/extensions",
-        "summary": "Azure Misconfiguration Scan tamamlandı",
+        "summary": "Azure Misconfiguration Scan completed",
         "themeColor": _theme_color(summary["score"]),
-        "title": "🛡️ Azure Misconfiguration Scan tamamlandı",
+        "title": "🛡️ Azure Misconfiguration Scan completed",
         "sections": [
             {
                 "facts": [{"name": name, "value": value} for name, value in _facts(summary)],
@@ -72,20 +72,20 @@ def _teams_payload(summary: dict) -> dict:
 
 
 def _slack_payload(summary: dict) -> dict:
-    """Slack "Incoming Webhook" formati - sade metn kifayet edir."""
+    """Slack "Incoming Webhook" format - plain text is enough."""
     lines = [f"*{name}:* {value}" for name, value in _facts(summary)]
-    return {"text": "🛡️ *Azure Misconfiguration Scan tamamlandı*\n" + "\n".join(lines)}
+    return {"text": "🛡️ *Azure Misconfiguration Scan completed*\n" + "\n".join(lines)}
 
 
 def send_teams_notification(webhook_url: str, summary: dict) -> bool:
-    """Teams webhook-una MessageCard gonderir. Ugurlu olarsa True qaytarir."""
+    """Sends a MessageCard to the Teams webhook. Returns True on success."""
     response = requests.post(webhook_url, json=_teams_payload(summary), timeout=TIMEOUT_SECONDS)
     response.raise_for_status()
     return True
 
 
 def send_slack_notification(webhook_url: str, summary: dict) -> bool:
-    """Slack webhook-una mesaj gonderir. Ugurlu olarsa True qaytarir."""
+    """Sends a message to the Slack webhook. Returns True on success."""
     response = requests.post(webhook_url, json=_slack_payload(summary), timeout=TIMEOUT_SECONDS)
     response.raise_for_status()
     return True
@@ -93,9 +93,9 @@ def send_slack_notification(webhook_url: str, summary: dict) -> bool:
 
 def notify_scan_complete(summary: dict) -> bool:
     """
-    .env-de webhook URL-i varsa bildiris gonderir, yoxdursa sakitce False
-    qaytarir. Sebeke xetalari udulur - bildirisin catmamasi skani ugursuz
-    saymaq ucun sebeb deyil.
+    Sends a notification if a webhook URL is set in .env, otherwise quietly returns
+    False. Network errors are swallowed - a missed notification is no reason
+    to treat the scan as failed.
     """
     teams_url = os.getenv("TEAMS_WEBHOOK_URL")
     slack_url = os.getenv("SLACK_WEBHOOK_URL")

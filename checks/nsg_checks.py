@@ -1,15 +1,15 @@
 """
 checks/nsg_checks.py
 
-NSG (Network Security Group) qaydalarinda check:
-  - Inbound, Allow qaydasi
-  - Source 0.0.0.0/0 / "*" / "Internet" / "Any" (yeni butun internet)
-  - Destination port 22 (SSH) veya 3389 (RDP) - tek port, range, ya da "*" ola biler
+Check on NSG (Network Security Group) rules:
+  - Inbound, Allow rule
+  - Source 0.0.0.0/0 / "*" / "Internet" / "Any" (i.e. the whole internet)
+  - Destination port 22 (SSH) or 3389 (RDP) - a single port, a range, or "*"
 
-Qeyd: Azure hemcinin default (avtomatik yaradilan) NSG qaydalarini da qaytarir.
-Bunlari ayirmaq ucun default_security_rules-a baxmiriq, yalniz security_rules
-(istifadecinin ozunun elave etdiyi qaydalar) uzerinden gedirik - cunki
-default qaydalar zaten Azure-un oz mudafiesidir, insan sehvi deyil.
+Note: Azure also returns the default (auto-created) NSG rules.
+To exclude them we don't look at default_security_rules, only at security_rules
+(rules the user added themselves) - because
+the default rules are Azure's own protection, not a human mistake.
 """
 
 from core.auth import AzureClients
@@ -20,8 +20,8 @@ OPEN_SOURCE_PREFIXES = {"*", "0.0.0.0/0", "internet", "any"}
 
 def _compliance_for_port(port: str) -> str:
     """
-    CIS Microsoft Azure Foundations Benchmark v2.1.0-da RDP ve SSH ayri-ayri
-    control-lardir (6.1 / 6.2). Port "*" olarsa, ikisi de acilir.
+    In CIS Microsoft Azure Foundations Benchmark v2.1.0, RDP and SSH are separate
+    controls (6.1 / 6.2). If the port is "*", both are open.
     """
     if port == "3389":
         return "CIS Azure 6.1"
@@ -46,9 +46,9 @@ def _finding(nsg_name: str, resource_group: str, rule_name: str,
 
 def _port_matches_risky(port_range: str) -> str | None:
     """
-    destination_port_range deyeri tek reqem ("22"), range ("20-30")
-    ve ya "*" ola biler. Bu funksiya risky portlardan birini ehate edirse
-    onu qaytarir, etmirse None qaytarir.
+    A destination_port_range value can be a single number ("22"), a range ("20-30")
+    or "*". If it covers one of the risky ports, this function
+    returns that port, otherwise None.
     """
     if port_range == "*":
         return "*"
@@ -81,8 +81,8 @@ def check_open_management_ports(clients: AzureClients) -> list[dict]:
             if rule.direction != "Inbound" or rule.access != "Allow":
                 continue
 
-            # Bezi qaydalarda tek source_address_prefix, bezilerinde
-            # source_address_prefixes (siyahi) olur - ikisini de yoxlayiriq
+            # Some rules have a single source_address_prefix, others
+            # source_address_prefixes (a list) - we check both
             sources = []
             if rule.source_address_prefix:
                 sources.append(rule.source_address_prefix)
@@ -92,7 +92,7 @@ def check_open_management_ports(clients: AzureClients) -> list[dict]:
             if not any(_source_is_open(s) for s in sources):
                 continue
 
-            # Eyni sekilde port ucun tek/coxlu saha ola biler
+            # Likewise, the port can be a single field or several
             port_ranges = []
             if rule.destination_port_range:
                 port_ranges.append(rule.destination_port_range)

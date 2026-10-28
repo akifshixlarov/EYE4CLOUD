@@ -10,7 +10,7 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 
-# HTTP və Azure SDK loglarında request/response sirlərinin sızmasının qarşısını almaq
+# Prevent request/response secrets from leaking into HTTP and Azure SDK logs
 for _log_name in ["azure", "urllib3", "msal", "azure.identity"]:
     logging.getLogger(_log_name).setLevel(logging.WARNING)
 
@@ -34,11 +34,11 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# 1. Parol qoruması (.env-də tənzimlənibsə aktivləşir)
+# 1. Password protection (enabled if configured in .env)
 if not require_login():
     st.stop()
 
-# 2. Sessiya idarəetməsi (in-memory credentials və tam per-session izolyasiya)
+# 2. Session management (in-memory credentials and full per-session isolation)
 session_id = init_session_state()
 public_mode = is_public_mode()
 session_scans_store = st.session_state["session_scans"]
@@ -89,7 +89,7 @@ with st.sidebar:
         "🎮 Demo Mode (Safe Preview)",
         value=st.session_state["demo_mode"],
         key="demo_toggle",
-        help="Heç bir Azure hesabı olmadan saxta nümunə məlumatları yükləyir",
+        help="Loads realistic sample data without any Azure account",
     )
     st.session_state["demo_mode"] = demo_mode
 
@@ -100,12 +100,12 @@ with st.sidebar:
         render_connect_panel()
         st.divider()
 
-        # Skan başlat düyməsi
-        st.subheader("⚡ Skan Əməliyyatı")
-        if st.button("🔄 Yeni skan başlat", type="primary", width="stretch", key="btn_run_scan"):
+        # Start scan button
+        st.subheader("⚡ Scan")
+        if st.button("🔄 Start new scan", type="primary", width="stretch", key="btn_run_scan"):
             active_creds = st.session_state.get("azure_creds")
             if public_mode and not active_creds:
-                st.error("Açıq rejimdə skan aparmaq üçün əvvəlcə 'Connect to Azure' bölməsindən məlumatlarınızı daxil edin.")
+                st.error("In public mode, connect via the 'Connect to Azure' panel before scanning.")
             else:
                 try:
                     execute_parallel_scan(
@@ -120,28 +120,28 @@ with st.sidebar:
                 except RuntimeError as e:
                     st.error(str(e))
                 except Exception as e:
-                    logging.exception("Skan zamanı gözlənilməz xəta: %s", redact(str(e)))
-                    st.error("Skan zamanı xəta baş verdi. Texniki detallar təhlükəsiz şəkildə server log-una yazıldı.")
+                    logging.exception("Unexpected error during scan: %s", redact(str(e)))
+                    st.error("An error occurred during the scan. Technical details were safely written to the server log.")
     else:
-        st.info("💡 **Demo rejimi aktivdir.** Azure bağlantısı tələb olunmur, realistik saxta məlumatlar göstərilir.")
-        if st.button("🔄 Demo məlumatları yenilə", width="stretch"):
+        st.info("💡 **Demo mode is active.** No Azure connection required; realistic sample data is shown.")
+        if st.button("🔄 Refresh demo data", width="stretch"):
             st.rerun()
 
     st.divider()
 
-    # Skan tarixçəsi
+    # Scan history
     available_scans = get_available_scans(session_id, is_demo=demo_mode, session_scans_store=session_scans_store)
-    st.subheader("📂 Skan Tarixçəsi")
-    st.caption(f"Cari sessiya üzrə skan sayı: {len(available_scans)}")
+    st.subheader("📂 Scan History")
+    st.caption(f"Scans in this session: {len(available_scans)}")
 
     if available_scans:
         scan_names = [name for name, _ in reversed(available_scans)]
-        selected_name = st.selectbox("Baxılacaq skan", scan_names, key="selected_scan_name")
+        selected_name = st.selectbox("Scan to view", scan_names, key="selected_scan_name")
 
         if not demo_mode:
             col_del, col_clear = st.columns(2)
             with col_del:
-                if st.button("🗑️ Bunu sil", width="stretch"):
+                if st.button("🗑️ Delete this scan", width="stretch"):
                     if public_mode:
                         st.session_state["session_scans"] = [
                             s for s in session_scans_store
@@ -154,7 +154,7 @@ with st.sidebar:
                             delete_scan(RESULTS_DIR / matched_file)
                     st.rerun()
             with col_clear:
-                if st.button("🧹 Təmizlə", width="stretch"):
+                if st.button("🧹 Clear", width="stretch"):
                     session_scans_store.clear()
                     if not public_mode:
                         clear_history()
@@ -178,24 +178,19 @@ if not available_scans:
     st.markdown(
         """
         <div style="background-color: #151a21; border: 1px solid #272f3d; border-radius: 10px; padding: 30px; text-align: center; margin-top: 20px;">
-            <h2 style="color: #2dd4bf; margin-bottom: 10px;">Hələ heç bir skan aparılmayıb</h2>
+            <h2 style="color: #2dd4bf; margin-bottom: 10px;">No scans yet</h2>
             <p style="color: #94a3b8; max-width: 600px; margin: 0 auto 20px auto;">
-                Azure bulud mühitinizin təhlükəsizlik vəziyyətini (Storage, NSG, Key Vault, VM, Dependencies)
-                yoxlamaq üçün sol paneldən Service Principal məlumatlarınızı daxil edib <strong>"Yeni skan başlat"</strong> düyməsini sıxın.
+                To check the security posture of your Azure environment (Storage, NSG, Key Vault, VM, Dependencies),
+                connect to Azure from the left panel and click <strong>"Start new scan"</strong>,
+                or turn on <strong>"Demo Mode"</strong> to explore sample data.
             </p>
         </div>
         """,
         unsafe_allow_html=True,
     )
-    st.write("")
-    col_demo_btn, _ = st.columns([1, 2])
-    with col_demo_btn:
-        if st.button("🎮 Nümunə məlumatlarla dərhal bax (Demo Mode)", type="primary", width="stretch"):
-            st.session_state["demo_mode"] = True
-            st.rerun()
     st.stop()
 
-# Seçilmiş skan məlumatı
+# Selected scan data
 selected_scan = next(
     (data for name, data in available_scans if name == selected_name),
     available_scans[-1][1],
@@ -212,7 +207,7 @@ scan_time = datetime.fromisoformat(selected_scan["scan_time"]).strftime("%Y-%m-%
 subs = selected_scan.get("subscription_ids") or [selected_scan.get("subscription_id", "—")]
 sub_label = ", ".join(subs)
 
-# Başlıq və Status Paneli
+# Header and status panel
 col_title, col_meta = st.columns([3, 2])
 with col_title:
     st.title("🛡️ Azure Security Posture Dashboard")
@@ -226,7 +221,7 @@ with col_meta:
         )
     st.markdown(
         f'<div style="text-align: right; color: #94a3b8; font-size: 13px;">'
-        f'Skan tarixi: <b>{scan_time}</b><br>Subscription: <code>{sub_label}</code>'
+        f'Scan time: <b>{scan_time}</b><br>Subscription: <code>{sub_label}</code>'
         f'</div>',
         unsafe_allow_html=True,
     )
@@ -245,7 +240,7 @@ tab_overview, tab_findings, tab_history, tab_deps, tab_accepted = st.tabs(
 # TAB 1: OVERVIEW
 # ============================================================================
 with tab_overview:
-    # 1. Gauge və Donut qrafikləri
+    # 1. Gauge and donut charts
     chart_col1, chart_col2 = st.columns([1, 1])
     with chart_col1:
         st.plotly_chart(get_gauge_chart(scores["overall"]), width="stretch")
@@ -256,22 +251,22 @@ with tab_overview:
     kpi1, kpi2, kpi3, kpi4 = st.columns(4)
     with kpi1:
         st.metric(
-            label="Ümumi Tapıntı",
+            label="Total Findings",
             value=len(selected_scan.get("findings", [])),
         )
     with kpi2:
         high_cnt = scores["findings_by_severity"].get("High", 0)
         st.metric(
-            label="🔴 Kritik / Yüksək Risk",
+            label="🔴 Critical / High Risk",
             value=high_cnt,
-            delta="Diqqət tələb edir" if high_cnt > 0 else "Təmiz",
+            delta="Needs attention" if high_cnt > 0 else "Clean",
             delta_color="inverse" if high_cnt > 0 else "normal",
         )
     with kpi3:
         med_cnt = scores["findings_by_severity"].get("Medium", 0)
         low_cnt = scores["findings_by_severity"].get("Low", 0)
         st.metric(
-            label="🟡 Orta / 🟢 Aşağı",
+            label="🟡 Medium / 🟢 Low",
             value=f"{med_cnt} / {low_cnt}",
         )
     with kpi4:
@@ -279,17 +274,17 @@ with tab_overview:
             chg = diff_data["score_change"]
             delta_str = f"+{chg}" if chg > 0 else str(chg)
             st.metric(
-                label="Score Dəyişimi",
+                label="Score Change",
                 value=f"{scores['overall']}/100",
-                delta=f"{delta_str} bənd",
+                delta=f"{delta_str} pts",
             )
         else:
-            st.metric(label="Score Dəyişimi", value="—", delta="İlk skan")
+            st.metric(label="Score Change", value="—", delta="First scan")
 
     st.markdown("---")
 
-    # 3. Kateqoriyalar üzrə vəziyyət
-    st.subheader("🛡️ Resurs Kateqoriyaları üzrə Posture")
+    # 3. Posture by category
+    st.subheader("🛡️ Posture by Resource Category")
     cat_items = list(scores.get("by_category", {}).items())
     if cat_items:
         cat_cols = st.columns(len(cat_items))
@@ -302,32 +297,32 @@ with tab_overview:
 
     st.markdown("---")
 
-    # 4. Son iki skan müqayisəsi (Diff)
-    st.subheader("🔄 Skan Müqayisəsi (Son iki skan arası)")
+    # 4. Diff of the last two scans
+    st.subheader("🔄 Scan Comparison (last two scans)")
     if diff_data:
         d_col1, d_col2 = st.columns(2)
         with d_col1:
-            st.markdown(f"**🆕 Yeni yaranan tapıntılar ({len(diff_data['new_findings'])})**")
+            st.markdown(f"**🆕 New findings ({len(diff_data['new_findings'])})**")
             if diff_data["new_findings"]:
                 for f in diff_data["new_findings"]:
                     st.error(f"**{f['resource']}** ({f['category']}): {f['issue']}")
             else:
-                st.success("Yeni yaranan risk yoxdur! 🎉")
+                st.success("No new risks! 🎉")
 
         with d_col2:
-            st.markdown(f"**✅ Həll olunan tapıntılar ({len(diff_data['resolved_findings'])})**")
+            st.markdown(f"**✅ Resolved findings ({len(diff_data['resolved_findings'])})**")
             if diff_data["resolved_findings"]:
                 for f in diff_data["resolved_findings"]:
                     st.success(f"**{f['resource']}** ({f['category']}): {f['issue']}")
             else:
-                st.caption("Son skandan bəri həll olunan tapıntı yoxdur.")
+                st.caption("No findings resolved since the last scan.")
     else:
-        st.info("Müqayisə və dəyişiklik dinamikası üçün ən azı 2 skan lazımdır.")
+        st.info("At least 2 scans are needed for comparison and trends.")
 
-    # 5. Trend xətti
+    # 5. Trend line
     if len(trend_history) > 1:
         st.markdown("---")
-        st.subheader("📈 Posture Score Trendi")
+        st.subheader("📈 Posture Score Trend")
         st.plotly_chart(get_trend_chart(trend_history), width="stretch")
 
 
@@ -335,13 +330,13 @@ with tab_overview:
 # TAB 2: FINDINGS
 # ============================================================================
 with tab_findings:
-    st.subheader("🔍 Azure Konfiqurasiya Tapıntıları")
+    st.subheader("🔍 Azure Configuration Findings")
 
     if not azure_findings:
-        st.success("Heç bir Azure konfiqurasiya problemi tapılmadı! Bulud mühitiniz əla qorunur. 🎉")
+        st.success("No Azure configuration issues found! Your cloud environment is well protected. 🎉")
     else:
-        # Top 5 Risks Bölməsi
-        st.markdown("#### 🚨 Ən Yüksək Təsirli Risklər (Top Risks)")
+        # Top 5 risks section
+        st.markdown("#### 🚨 Top Risks")
         sorted_by_risk = sorted(
             azure_findings,
             key=lambda x: (SEVERITY_ORDER.get(x.get("severity", "Low"), 3), x.get("resource", "")),
@@ -366,33 +361,33 @@ with tab_findings:
 
         st.markdown("---")
 
-        # Kateqoriyalar üzrə paylanma qrafiki
+        # Distribution by category chart
         cat_chart_col, _ = st.columns([1, 1])
         with cat_chart_col:
             st.plotly_chart(get_category_bar(azure_findings), width="stretch")
 
         st.markdown("---")
 
-        # Filtrlər və Axtarış
-        st.markdown("#### ⚙️ Filtrlər və Axtarış")
+        # Filters and search
+        st.markdown("#### ⚙️ Filters & Search")
         f_search_col, f_sev_col, f_cat_col, f_rg_col = st.columns([2, 1, 1, 1])
 
         with f_search_col:
-            search_query = st.text_input("Axtarış", placeholder="Resurs adı, check, xəta və ya CIS...", label_visibility="collapsed")
+            search_query = st.text_input("Search", placeholder="Resource name, check, issue or CIS...", label_visibility="collapsed")
 
-        # Mövcud dəyərlər
+        # Available values
         all_sevs = ["High", "Medium", "Low"]
         all_cats = sorted(list({f.get("category", "") for f in azure_findings if f.get("category")}))
         all_rgs = sorted(list({f.get("resource_group", "") for f in azure_findings if f.get("resource_group")}))
 
         with f_sev_col:
-            selected_sevs = st.multiselect("Severity", options=all_sevs, default=all_sevs, placeholder="Severity seçin")
+            selected_sevs = st.multiselect("Severity", options=all_sevs, default=all_sevs, placeholder="Select severity")
         with f_cat_col:
-            selected_cats = st.multiselect("Kateqoriya", options=all_cats, default=all_cats, placeholder="Kateqoriya")
+            selected_cats = st.multiselect("Category", options=all_cats, default=all_cats, placeholder="Category")
         with f_rg_col:
             selected_rgs = st.multiselect("Resource Group", options=all_rgs, default=all_rgs, placeholder="Resource Group")
 
-        # Filtrləmə məntiqi
+        # Filtering logic
         filtered_findings = []
         for f in azure_findings:
             if selected_sevs and f.get("severity") not in selected_sevs:
@@ -408,13 +403,13 @@ with tab_findings:
                     continue
             filtered_findings.append(f)
 
-        st.caption(f"Göstərilən tapıntılar: {len(filtered_findings)} / {len(azure_findings)}")
+        st.caption(f"Showing findings: {len(filtered_findings)} / {len(azure_findings)}")
 
-        # Cədvəl
+        # Table
         if filtered_findings:
             df = pd.DataFrame(filtered_findings)
             df["status"] = df.apply(
-                lambda r: "✅ Qəbul edilib" if (r["category"], r["resource"], r["check"]) in accepted else "",
+                lambda r: "✅ Accepted" if (r["category"], r["resource"], r["check"]) in accepted else "",
                 axis=1,
             )
             df["_sort"] = df["severity"].map(SEVERITY_ORDER)
@@ -430,55 +425,55 @@ with tab_findings:
 
             st.markdown("---")
 
-            # Expandable Remediation və Risk Acceptance
-            st.markdown("#### 🛠️ Həll Təlimatları (Remediation) və Risk Qəbulu")
+            # Expandable remediation and risk acceptance
+            st.markdown("#### 🛠️ Remediation & Risk Acceptance")
             for finding in sorted(filtered_findings, key=lambda f: SEVERITY_ORDER.get(f.get("severity", "Low"), 3)):
                 f_key = (finding["category"], finding["resource"], finding["check"])
                 is_accepted = f_key in accepted
                 widget_key = f"{finding['category']}|{finding['resource']}|{finding['check']}"
                 sev_icon = "🔴" if finding["severity"] == "High" else ("🟡" if finding["severity"] == "Medium" else "🟢")
-                label = f"{'✅ [QƏBUL EDİLDİ] ' if is_accepted else ''}{sev_icon} {finding['resource']} — {finding['check']} ({finding['category']})"
+                label = f"{'✅ [ACCEPTED] ' if is_accepted else ''}{sev_icon} {finding['resource']} — {finding['check']} ({finding['category']})"
 
                 with st.expander(label):
-                    st.markdown(f"**Xəta / Problem:** {finding['issue']}")
-                    st.markdown(f"**Uyğunluq (Compliance):** `{finding.get('compliance', 'N/A')}` &nbsp;|&nbsp; **Resource Group:** `{finding.get('resource_group', 'N/A')}`")
+                    st.markdown(f"**Issue:** {finding['issue']}")
+                    st.markdown(f"**Compliance:** `{finding.get('compliance', 'N/A')}` &nbsp;|&nbsp; **Resource Group:** `{finding.get('resource_group', 'N/A')}`")
 
                     remediation = get_remediation(finding)
-                    st.info(f"💡 **Tövsiyə:** {remediation['advice']}")
+                    st.info(f"💡 **Recommendation:** {remediation['advice']}")
 
                     if remediation.get("command"):
-                        st.markdown("**CLI Düzəliş Əmri (Kopyalamaq üçün hazırdır):**")
+                        st.markdown("**CLI fix command (ready to copy):**")
                         st.code(remediation["command"], language="bash")
 
                     # Risk Acceptance Form
                     if not demo_mode:
                         if is_accepted:
-                            if st.button("🚫 Riskin qəbulunu ləğv et", key=f"revoke_{widget_key}"):
+                            if st.button("🚫 Revoke risk acceptance", key=f"revoke_{widget_key}"):
                                 revoke_acceptance(finding["category"], finding["resource"], finding["check"], store=accepted_store)
                                 st.rerun()
                         else:
                             r_col1, r_col2 = st.columns([3, 1])
                             with r_col1:
-                                reason = st.text_input("Qəbul səbəbi (audit üçün qeyd)", key=f"reason_{widget_key}")
+                                reason = st.text_input("Acceptance reason (audit note)", key=f"reason_{widget_key}")
                             with r_col2:
                                 st.write("")
                                 st.write("")
-                                if st.button("✅ Riski qəbul et", key=f"accept_{widget_key}"):
+                                if st.button("✅ Accept risk", key=f"accept_{widget_key}"):
                                     if reason.strip():
                                         accept_risk(finding, reason, store=accepted_store)
                                         st.rerun()
                                     else:
-                                        st.warning("Zəhmət olmasa səbəb qeyd edin.")
+                                        st.warning("Please provide a reason.")
 
-            # Eksport Bölməsi
+            # Export section
             st.markdown("---")
-            st.markdown("#### 📥 Hesabatı Yüklə (Export)")
+            st.markdown("#### 📥 Download Report (Export)")
             exp_col1, exp_col2, exp_col3 = st.columns(3)
 
             with exp_col1:
                 csv_data = export_csv(filtered_findings)
                 st.download_button(
-                    label="📥 CSV olaraq yüklə",
+                    label="📥 Download as CSV",
                     data=csv_data,
                     file_name=f"eye4cloud_findings_{scan_time[:10]}.csv",
                     mime="text/csv",
@@ -488,7 +483,7 @@ with tab_findings:
             with exp_col2:
                 json_data = export_json(selected_scan)
                 st.download_button(
-                    label="📥 JSON olaraq yüklə",
+                    label="📥 Download as JSON",
                     data=json_data,
                     file_name=f"eye4cloud_scan_{scan_time[:10]}.json",
                     mime="application/json",
@@ -498,28 +493,28 @@ with tab_findings:
             with exp_col3:
                 html_data = export_html_report(selected_scan, scores)
                 st.download_button(
-                    label="📄 Standalone HTML Hesabatı yüklə",
+                    label="📄 Download standalone HTML report",
                     data=html_data,
                     file_name=f"eye4cloud_report_{scan_time[:10]}.html",
                     mime="text/html",
                     width="stretch",
                 )
         else:
-            st.info("Axtarış və ya filtrlərə uyğun heç bir tapıntı tapılmadı.")
+            st.info("No findings match the search or filters.")
 
 
 # ============================================================================
 # TAB 3: HISTORY
 # ============================================================================
 with tab_history:
-    st.subheader("📂 Skan Tarixçəsi və Nəticələr")
+    st.subheader("📂 Scan History & Results")
     history_rows = []
     for name, s in available_scans:
         s_scores = calculate_scores(s.get("findings", []))
         history_rows.append({
-            "Skan Adı": name,
-            "Tarix (UTC)": datetime.fromisoformat(s["scan_time"]).strftime("%Y-%m-%d %H:%M"),
-            "Tapıntı Sayı": len(s.get("findings", [])),
+            "Scan Name": name,
+            "Date (UTC)": datetime.fromisoformat(s["scan_time"]).strftime("%Y-%m-%d %H:%M"),
+            "Findings": len(s.get("findings", [])),
             "Posture Score": f"{s_scores['overall']}/100",
             "High": s_scores["findings_by_severity"].get("High", 0),
             "Medium": s_scores["findings_by_severity"].get("Medium", 0),
@@ -528,14 +523,14 @@ with tab_history:
 
     if history_rows:
         st.dataframe(pd.DataFrame(history_rows), width="stretch", hide_index=True)
-    st.caption("Fərdi skanları seçmək və ya silmək üçün sol paneldəki idarəetmə elementlərindən istifadə edin.")
+    st.caption("Use the controls in the left panel to select or delete individual scans.")
 
 
 # ============================================================================
 # TAB 4: DEPENDENCIES
 # ============================================================================
 with tab_deps:
-    st.subheader("📦 Asılılıqlar və Kitabxana Təhlükəsizliyi (PyPI CVE)")
+    st.subheader("📦 Dependency & Library Security (PyPI CVE)")
     if dependency_findings:
         df_dep = pd.DataFrame(dependency_findings)
         df_dep["_sort"] = df_dep["severity"].map(SEVERITY_ORDER)
@@ -549,7 +544,7 @@ with tab_deps:
 
         csv_dep = export_csv(dependency_findings)
         st.download_button(
-            "📥 Dependencies CSV yüklə",
+            "📥 Download dependencies CSV",
             csv_dep,
             "dependency_findings.csv",
             "text/csv",
@@ -558,7 +553,7 @@ with tab_deps:
         )
 
         st.markdown("---")
-        st.markdown("#### 🛠️ Təhlükəsizlik Tövsiyələri")
+        st.markdown("#### 🛠️ Security Recommendations")
         for finding in sorted(dependency_findings, key=lambda f: SEVERITY_ORDER.get(f.get("severity", "Low"), 3)):
             with st.expander(f"{finding['resource']} — {finding['check']}"):
                 remediation = get_remediation(finding)
@@ -566,17 +561,17 @@ with tab_deps:
                 if remediation.get("command"):
                     st.code(remediation["command"], language="bash")
     else:
-        st.caption("Dependency tapıntısı yoxdur — bilinən CVE zəifliyi aşkar edilmədi.")
+        st.caption("No dependency findings — no known CVEs detected.")
 
 
 # ============================================================================
 # TAB 5: ACCEPTED RISKS
 # ============================================================================
 with tab_accepted:
-    st.subheader("✅ Qəbul Edilmiş Risklər (Exceptions)")
+    st.subheader("✅ Accepted Risks (Exceptions)")
     accepted_risks = list_accepted_risks(store=accepted_store)
     if accepted_risks:
         st.dataframe(pd.DataFrame(accepted_risks), width="stretch", hide_index=True)
-        st.caption("Qəbul edilmiş risklərin statusunu 'Findings' bölməsindəki təlimatlardan ləğv edə bilərsiniz.")
+        st.caption("You can revoke accepted risks from the remediation panels in the 'Findings' tab.")
     else:
-        st.caption("Hələ heç bir risk qəbul edilməyib.")
+        st.caption("No risks accepted yet.")

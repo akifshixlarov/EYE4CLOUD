@@ -1,11 +1,11 @@
 """
 core/scanner.py
 
-Bütün checks/*.py modullarını çağırır və nəticələri birləşdirir.
+Calls all checks/*.py modules and merges the results.
 
-Public Mode dəstəyi:
-- PUBLIC_MODE=true olduqda nəticələr diskə (results/) YAZILMIR və webhook göndərilmir.
-- Credential-lar eksplisit parametr kimi qəbul olunur və get_clients-ə ötürülür.
+Public Mode support:
+- With PUBLIC_MODE=true, results are NOT written to disk (results/) and no webhook is sent.
+- Credentials are accepted as an explicit parameter and passed to get_clients.
 """
 
 import json
@@ -40,8 +40,8 @@ def run_scan(
     credentials: dict | None = None,
 ) -> dict:
     """
-    Bir tam skan icra edir və nəticə dict-ini qaytarır.
-    credentials parametr vasitəsilə sessiyadan təhlükəsiz şəkildə ötürülür.
+    Runs one full scan and returns the result dict.
+    credentials are passed safely from the session as a parameter.
     """
     subscription_ids = list_subscription_ids(credentials)
 
@@ -55,7 +55,7 @@ def run_scan(
 
     # Dependency check (CVE)
     if progress_callback:
-        progress_callback("Dependencies (CVE)", "running", "OSV.dev sorğuları...")
+        progress_callback("Dependencies (CVE)", "running", "Querying OSV.dev...")
     for finding in run_all_dependency_checks():
         finding["subscription_id"] = "N/A"
         findings.append(finding)
@@ -69,7 +69,7 @@ def run_scan(
         "findings": findings,
     }
 
-    # Public rejimdə diskə yazılmır və webhook göndərilmir
+    # In public mode nothing is written to disk and no webhook is sent
     if not is_public_mode():
         _save_result(result, session_id=session_id)
         _notify(result)
@@ -82,7 +82,7 @@ def _scan_subscription(
     progress_callback=None,
     credentials: dict | None = None,
 ) -> list[dict]:
-    """Tək bir subscription üzərində bütün Azure check-lərini işlədir."""
+    """Runs all Azure checks against a single subscription."""
     clients = get_clients(subscription_id, credentials=credentials)
 
     findings = []
@@ -93,12 +93,12 @@ def _scan_subscription(
             results = check_fn(clients)
             findings += results
             if progress_callback:
-                detail = f"{len(results)} tapıntı" if results else "Təmiz ✓"
+                detail = f"{len(results)} findings" if results else "Clean ✓"
                 progress_callback(check_name, "complete", detail)
         except Exception:
-            logging.exception("Check '%s' xəta ilə tamamlandı (sub: %s)", check_name, subscription_id[:8])
+            logging.exception("Check '%s' failed (sub: %s)", check_name, subscription_id[:8])
             if progress_callback:
-                progress_callback(check_name, "error", "Xəta baş verdi - atlandı")
+                progress_callback(check_name, "error", "An error occurred - skipped")
 
     for finding in findings:
         finding["subscription_id"] = subscription_id
@@ -107,7 +107,7 @@ def _scan_subscription(
 
 
 def _notify(result: dict) -> None:
-    """Skan xülasəsini webhook-a göndərir (yalnız non-public rejimdə)."""
+    """Sends the scan summary to the webhook (non-public mode only)."""
     if is_public_mode():
         return
 
@@ -123,11 +123,11 @@ def _notify(result: dict) -> None:
         }
         notify_scan_complete(summary)
     except Exception:
-        logging.exception("Bildiriş göndərilmədi")
+        logging.exception("Notification was not sent")
 
 
 def _save_result(result: dict, session_id: str | None = None) -> Path:
-    """Nəticəni results/ qovluğunda saxlayır (yalnız non-public rejimdə)."""
+    """Saves the result in the results/ folder (non-public mode only)."""
     RESULTS_DIR.mkdir(exist_ok=True)
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
     if session_id:
