@@ -62,6 +62,7 @@ def calculate_scores(findings: list[dict], accepted_keys: set | None = None) -> 
         "Network Security Group",
         "Key Vault",
         "Virtual Machine",
+        "Azure SQL",
     } | categories
 
     by_category = {}
