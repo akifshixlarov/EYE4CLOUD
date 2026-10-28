@@ -116,6 +116,21 @@ def validate_subscription_ids(raw_sub_ids: list[str] | str) -> tuple[bool, str, 
     return True, "", sub_list
 
 
+# Telegram bot token ("<bot id>:<secret>") and chat ID (numeric, or @channel username).
+# The token goes into the Bot API URL path, so the format is checked strictly.
+TELEGRAM_TOKEN_REGEX = re.compile(r"^\d{5,15}:[A-Za-z0-9_-]{30,50}$")
+TELEGRAM_CHAT_ID_REGEX = re.compile(r"^(-?\d{1,20}|@[A-Za-z][A-Za-z0-9_]{4,31})$")
+
+
+def validate_telegram_config(bot_token: str, chat_id: str) -> tuple[bool, str]:
+    """Validates a Telegram bot token and chat ID. The error never includes the token."""
+    if not TELEGRAM_TOKEN_REGEX.match((bot_token or "").strip()):
+        return False, "Bot token format is invalid (expected `123456789:ABC...` from @BotFather)."
+    if not TELEGRAM_CHAT_ID_REGEX.match((chat_id or "").strip()):
+        return False, "Chat ID must be a number (e.g. 123456789 or -100...) or a @channel name."
+    return True, ""
+
+
 def redact(text: Any, secrets: list[str] | None = None) -> str:
     """
     Masks all known secrets or sensitive key patterns in the text with [REDACTED].

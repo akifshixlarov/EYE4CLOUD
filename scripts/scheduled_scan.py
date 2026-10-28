@@ -49,7 +49,7 @@ def main() -> int:
     _setup_logging()
 
     try:
-        result = run_scan()
+        result = run_scan(trigger="Scheduled")
     except Exception:
         logging.exception("Scan failed")
         return 1
