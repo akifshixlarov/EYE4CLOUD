@@ -15,7 +15,7 @@ _TWO_DAYS_AGO = _NOW - timedelta(days=2)
 DEMO_SCAN_PREVIOUS = {
     "scan_time": _YESTERDAY.isoformat(),
     "subscription_ids": ["demo-sub-production-01", "demo-sub-analytics-02"],
-    "total_findings": 7,
+    "total_findings": 6,
     "findings": [
         {
             "category": "Storage Account",
@@ -77,23 +77,13 @@ DEMO_SCAN_PREVIOUS = {
             "compliance": "CIS 7.1",
             "subscription_id": "demo-sub-production-01",
         },
-        {
-            "category": "Dependency",
-            "resource": "urllib3==1.26.4",
-            "resource_group": "N/A",
-            "check": "PyPI vulnerability (CVE)",
-            "issue": "CVE-2021-33503: ReDoS vulnerability in Catastrophic backtracking",
-            "severity": "Medium",
-            "compliance": "N/A",
-            "subscription_id": "N/A",
-        },
     ],
 }
 
 DEMO_SCAN_LATEST = {
     "scan_time": _NOW.isoformat(),
     "subscription_ids": ["demo-sub-production-01", "demo-sub-analytics-02"],
-    "total_findings": 6,
+    "total_findings": 5,
     "findings": [
         {
             "category": "Storage Account",
@@ -144,16 +134,6 @@ DEMO_SCAN_LATEST = {
             "severity": "Medium",
             "compliance": "CIS 8.2",
             "subscription_id": "demo-sub-production-01",
-        },
-        {
-            "category": "Dependency",
-            "resource": "requests==2.25.1",
-            "resource_group": "N/A",
-            "check": "PyPI vulnerability (CVE)",
-            "issue": "GHSA-j8r2-6x86-q33q: Unintended leak of Proxy-Authorization header",
-            "severity": "Medium",
-            "compliance": "N/A",
-            "subscription_id": "N/A",
         },
     ],
 }

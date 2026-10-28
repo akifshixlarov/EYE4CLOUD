@@ -7,7 +7,7 @@ Helper module that coordinates session data, Demo mode and scan history.
 from pathlib import Path
 import streamlit as st
 
-from core.diff import _finding_key
+from core.diff import diff_scans
 from core.scoring import calculate_scores
 from core.history import load_scan
 from ui.demo_data import get_demo_scans
@@ -45,28 +45,7 @@ def compute_scan_diff(scans: list[dict]) -> dict | None:
     """
     if len(scans) < 2:
         return None
-
-    previous = scans[-2]
-    latest = scans[-1]
-
-    previous_keys = {_finding_key(f): f for f in previous.get("findings", [])}
-    latest_keys = {_finding_key(f): f for f in latest.get("findings", [])}
-
-    new_findings = [f for key, f in latest_keys.items() if key not in previous_keys]
-    resolved_findings = [f for key, f in previous_keys.items() if key not in latest_keys]
-
-    prev_score = calculate_scores(previous.get("findings", []))["overall"]
-    curr_score = calculate_scores(latest.get("findings", []))["overall"]
-
-    return {
-        "previous_time": previous.get("scan_time", ""),
-        "latest_time": latest.get("scan_time", ""),
-        "previous_score": prev_score,
-        "latest_score": curr_score,
-        "score_change": curr_score - prev_score,
-        "new_findings": new_findings,
-        "resolved_findings": resolved_findings,
-    }
+    return diff_scans(scans[-2], scans[-1])
 
 
 def compute_score_history(scans: list[dict]) -> list[dict]:

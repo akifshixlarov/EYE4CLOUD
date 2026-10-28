@@ -70,12 +70,6 @@ REMEDIATION = {
                    "--resource-group {resource_group} "
                    "--enable-purge-protection true",
     },
-    "known_vulnerability": {
-        "advice": "Upgrade the package to the fixed version reported by OSV.dev (or "
-                  "newer), then regenerate requirements.lock.txt "
-                  "(`pip freeze > requirements.lock.txt`).",
-        "command": "pip install --upgrade {resource}",
-    },
 }
 
 DEFAULT_ADVICE = "No specific remediation advice has been written for this check yet."
@@ -96,10 +90,6 @@ def get_remediation(finding: dict) -> dict:
 
     resource = finding.get("resource", "<resource>")
     resource_group = finding.get("resource_group", "<resource-group>")
-
-    if check_id == "known_vulnerability":
-        # resource is in "package==version" format - pip install needs the bare package name
-        resource = resource.split("==")[0]
 
     command = entry["command"].format(resource=resource, resource_group=resource_group)
 
