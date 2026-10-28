@@ -19,6 +19,7 @@ from azure.mgmt.storage import StorageManagementClient
 from azure.mgmt.network import NetworkManagementClient
 from azure.mgmt.keyvault import KeyVaultManagementClient
 from azure.mgmt.compute import ComputeManagementClient
+from azure.mgmt.sql import SqlManagementClient
 
 try:
     from azure.mgmt.resource import ResourceManagementClient
@@ -40,6 +41,7 @@ class AzureClients:
     network: NetworkManagementClient
     keyvault: KeyVaultManagementClient
     compute: ComputeManagementClient
+    sql: SqlManagementClient
 
 
 def has_env_credentials() -> bool:
@@ -167,6 +169,7 @@ def get_clients(subscription_id: str | None = None, credentials: dict | None = N
         network=NetworkManagementClient(credential, subscription_id),
         keyvault=KeyVaultManagementClient(credential, subscription_id),
         compute=ComputeManagementClient(credential, subscription_id),
+        sql=SqlManagementClient(credential, subscription_id),
     )
 
 

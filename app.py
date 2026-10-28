@@ -246,6 +246,14 @@ with col_meta:
 
 st.markdown("---")
 
+# Check modules that failed as a whole (e.g. no permission, provider not registered)
+scan_errors = selected_scan.get("errors") or []
+if scan_errors:
+    st.warning(
+        f"⚠️ {len(scan_errors)} check module(s) could not run in this scan - their results are missing:\n\n"
+        + "\n".join(f"- {e}" for e in scan_errors)
+    )
+
 # Older saved scans may still contain "Dependency" findings - that check was removed
 azure_findings = [f for f in selected_scan.get("findings", []) if f.get("category") != "Dependency"]
 
@@ -303,10 +311,11 @@ with tab_overview:
 
     # 3. Posture by category
     st.subheader("🛡️ Posture by Resource Category")
-    cat_items = list(scores.get("by_category", {}).items())
-    if cat_items:
-        cat_cols = st.columns(len(cat_items))
-        for col, (cat_name, cat_score) in zip(cat_cols, cat_items):
+    cat_items = sorted(scores.get("by_category", {}).items())
+    # Rows of at most 4 cards - one row for every category gets too cramped
+    for row_start in range(0, len(cat_items), 4):
+        row_items = cat_items[row_start:row_start + 4]
+        for col, (cat_name, cat_score) in zip(st.columns(4), row_items):
             with col:
                 st.metric(
                     label=f"{_score_color(cat_score)} {cat_name}",

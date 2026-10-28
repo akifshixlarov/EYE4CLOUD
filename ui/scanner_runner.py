@@ -25,19 +25,11 @@ from core.security import (
     GLOBAL_SCAN_SEMAPHORE,
     MAX_SCANS_PER_WINDOW,
 )
-from checks.storage_checks import run_all_storage_checks
-from checks.nsg_checks import run_all_nsg_checks
-from checks.keyvault_checks import run_all_keyvault_checks
-from checks.vm_checks import run_all_vm_checks
+from core.scanner import CHECK_MODULES, module_error_message
 from core.notifications import build_summary, notify_scan_complete
 from core.history import RESULTS_DIR, load_scan
 
-CHECK_DEFINITIONS = [
-    ("Storage Accounts", run_all_storage_checks),
-    ("Network Security Groups", run_all_nsg_checks),
-    ("Key Vaults", run_all_keyvault_checks),
-    ("Virtual Machines", run_all_vm_checks),
-]
+CHECK_DEFINITIONS = CHECK_MODULES
 
 
 def execute_parallel_scan(
@@ -69,6 +61,7 @@ def execute_parallel_scan(
 
         with st.status("🔍 Scanning the Azure environment for security issues...", expanded=True) as status_box:
             all_findings = []
+            errors = []
             total_steps = len(subscription_ids) * len(CHECK_DEFINITIONS)
             progress_bar = st.progress(0, text="Starting scan...")
             completed_steps = 0
@@ -99,6 +92,7 @@ def execute_parallel_scan(
                             st.write(f"&nbsp;&nbsp;✔️ **{check_name}**: {detail}")
                         except Exception as e:
                             logging.exception("Error during check '%s'", check_name)
+                            errors.append(module_error_message(check_name, sub_id, e))
                             st.write(f"&nbsp;&nbsp;⚠️ **{check_name}**: Skipped due to an error ({type(e).__name__})")
 
             progress_bar.progress(100, text="Scan complete!")
@@ -109,6 +103,7 @@ def execute_parallel_scan(
             "subscription_ids": subscription_ids,
             "total_findings": len(all_findings),
             "findings": all_findings,
+            "errors": errors,
         }
 
         # 3. Store in memory or on disk

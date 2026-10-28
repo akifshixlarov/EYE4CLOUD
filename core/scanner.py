@@ -16,20 +16,28 @@ from pathlib import Path
 from core.auth import get_clients, list_subscription_ids
 from core.history import load_scan
 from core.notifications import build_summary, notify_scan_complete
-from core.security import is_public_mode
+from core.security import is_public_mode, redact
 from checks.storage_checks import run_all_storage_checks
 from checks.nsg_checks import run_all_nsg_checks
 from checks.keyvault_checks import run_all_keyvault_checks
 from checks.vm_checks import run_all_vm_checks
+from checks.sql_checks import run_all_sql_checks
 
 RESULTS_DIR = Path(__file__).resolve().parent.parent / "results"
 
-_CHECK_MODULES = [
+# The single list of check modules - ui/scanner_runner.py uses it too
+CHECK_MODULES = [
     ("Storage Account", run_all_storage_checks),
     ("Network Security Group", run_all_nsg_checks),
     ("Key Vault", run_all_keyvault_checks),
     ("Virtual Machine", run_all_vm_checks),
+    ("Azure SQL", run_all_sql_checks),
 ]
+
+
+def module_error_message(check_name: str, subscription_id: str, error: Exception) -> str:
+    """Readable, secret-free text for result["errors"] when a whole check module fails."""
+    return redact(f"{check_name} (sub {subscription_id[:8]}...): {type(error).__name__} - check skipped")
 
 
 def run_scan(
@@ -46,11 +54,13 @@ def run_scan(
     subscription_ids = list_subscription_ids(credentials)
 
     findings = []
+    errors = []
     for subscription_id in subscription_ids:
         findings += _scan_subscription(
             subscription_id,
             progress_callback=progress_callback,
             credentials=credentials,
+            errors=errors,
         )
 
     result = {
@@ -58,6 +68,7 @@ def run_scan(
         "subscription_ids": subscription_ids,
         "total_findings": len(findings),
         "findings": findings,
+        "errors": errors,
     }
 
     # In public mode nothing is written to disk and no webhook is sent
@@ -73,12 +84,13 @@ def _scan_subscription(
     subscription_id: str,
     progress_callback=None,
     credentials: dict | None = None,
+    errors: list[str] | None = None,
 ) -> list[dict]:
-    """Runs all Azure checks against a single subscription."""
+    """Runs all Azure checks against a single subscription; module failures go to `errors`."""
     clients = get_clients(subscription_id, credentials=credentials)
 
     findings = []
-    for check_name, check_fn in _CHECK_MODULES:
+    for check_name, check_fn in CHECK_MODULES:
         if progress_callback:
             progress_callback(check_name, "running", f"Subscription: {subscription_id[:8]}...")
         try:
@@ -87,8 +99,10 @@ def _scan_subscription(
             if progress_callback:
                 detail = f"{len(results)} findings" if results else "Clean ✓"
                 progress_callback(check_name, "complete", detail)
-        except Exception:
+        except Exception as e:
             logging.exception("Check '%s' failed (sub: %s)", check_name, subscription_id[:8])
+            if errors is not None:
+                errors.append(module_error_message(check_name, subscription_id, e))
             if progress_callback:
                 progress_callback(check_name, "error", "An error occurred - skipped")
 
