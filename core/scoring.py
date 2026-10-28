@@ -1,14 +1,14 @@
 """
 core/scoring.py
 
-Tapintilar siyahisini alib 0-100 araliginda "posture score" hesablayir.
-Hem umumi score, hem de kateqoriya uzre (Storage / NSG / Key Vault) ayri
-score qaytarir - beleliklə Streamlit-de "Storage: 85/100, NSG: 40/100"
-kimi parcalanmis gorunus vermek mumkun olur.
+Takes a list of findings and computes a 0-100 "posture score".
+Returns both an overall score and a separate score per category
+(Storage / NSG / Key Vault) - so Streamlit can show a breakdown like
+"Storage: 85/100, NSG: 40/100".
 
-Metodologiya sade tutulub (weighted deduction) - meqsed akademik cehetden
-"dogru" bir risk modeli qurmaq deyil, tapintilari prioritetlesdirmek ucun
-anlasilan ve izah oluna bilen bir reqem vermekdir.
+The methodology is kept simple (weighted deduction) - the goal is not to build an
+academically "correct" risk model, but to give an understandable, explainable
+number for prioritising findings.
 """
 
 SEVERITY_WEIGHTS = {
@@ -19,7 +19,7 @@ SEVERITY_WEIGHTS = {
 
 
 def _score_from_findings(findings: list[dict]) -> int:
-    """Verilen tapinti siyahisi ucun 100-den basliyib cixan score hesablayir."""
+    """Computes a score for the given findings list, starting at 100 and deducting."""
     score = 100
     for finding in findings:
         weight = SEVERITY_WEIGHTS.get(finding.get("severity"), 5)
@@ -29,7 +29,7 @@ def _score_from_findings(findings: list[dict]) -> int:
 
 def calculate_scores(findings: list[dict], accepted_keys: set | None = None) -> dict:
     """
-    Umumi ve kateqoriya uzre score-lari qaytarir:
+    Returns the overall and per-category scores:
 
     {
         "overall": 62,
@@ -41,11 +41,11 @@ def calculate_scores(findings: list[dict], accepted_keys: set | None = None) -> 
         "findings_by_severity": {"High": 3, "Medium": 2, "Low": 0}
     }
 
-    `accepted_keys` verilibse ("Accepted Risk" mexanizmi - bax:
-    core/exceptions.py), (category, resource, check) acari bu setde olan
-    tapintilar score hesablamasindan (ve severity sayindan) cixarilir -
-    findings siyahisinin ozunde onlar hele de qalir, sadece score-a tesir
-    etmirler.
+    `accepted_keys` given ("Accepted Risk" mechanism - see
+    core/exceptions.py): findings whose (category, resource, check) key is in this set
+    are excluded from the score calculation (and severity counts) -
+    they still remain in the findings list itself, they just don't affect
+    the score.
     """
     accepted_keys = accepted_keys or set()
     active_findings = [
@@ -56,9 +56,9 @@ def calculate_scores(findings: list[dict], accepted_keys: set | None = None) -> 
     overall = _score_from_findings(active_findings)
 
     categories = {f["category"] for f in active_findings}
-    # Findings bos olsa bele, standart Azure kateqoriyalarini 100 ile
-    # gostermek ucun (Dependency burada yoxdur - o, opsional check-dir ve
-    # requirements.lock.txt olmayanda umumiyyetle islemir)
+    # Even if findings are empty, show the standard Azure categories at 100
+    # (Dependency is not here - it is an optional check and
+    # doesn't run at all without requirements.lock.txt)
     all_categories = {
         "Storage Account",
         "Network Security Group",

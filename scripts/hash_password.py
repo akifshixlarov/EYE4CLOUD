@@ -1,17 +1,17 @@
 """
 scripts/hash_password.py
 
-Dashboard parolu ucun bcrypt hash yaradir. Neticeni .env-e kopyala:
+Creates a bcrypt hash for the dashboard password. Copy the result into .env:
 
-    DASHBOARD_PASSWORD_HASH=<cixan hash>
+    DASHBOARD_PASSWORD_HASH=<resulting hash>
 
-Istifade:
-    python scripts/hash_password.py           # parol soruslur (ekranda gorunmur)
-    echo "parol" | python scripts/hash_password.py
+Usage:
+    python scripts/hash_password.py           # prompts for the password (hidden input)
+    echo "password" | python scripts/hash_password.py
 
-Niye hash: aciq parol (DASHBOARD_PASSWORD) da isleyir, amma o halda
-streamlit-authenticator her rerun-da yeniden hash hesablayir (bcrypt qesden
-yavasdir) - hash versiyasi hem daha suretli, hem de .env-de aciq parol saxlamir.
+Why a hash: a plain password (DASHBOARD_PASSWORD) also works, but then
+streamlit-authenticator re-hashes it on every rerun (bcrypt is deliberately
+slow) - the hash version is both faster and keeps no plain password in .env.
 """
 
 import getpass
@@ -26,12 +26,12 @@ import streamlit_authenticator as stauth  # noqa: E402
 
 def main() -> int:
     if sys.stdin.isatty():
-        password = getpass.getpass("Parol: ")
+        password = getpass.getpass("Password: ")
     else:
         password = sys.stdin.readline().strip()
 
     if not password:
-        print("Parol bos ola bilmez.", file=sys.stderr)
+        print("Password cannot be empty.", file=sys.stderr)
         return 1
 
     print(stauth.Hasher.hash(password))

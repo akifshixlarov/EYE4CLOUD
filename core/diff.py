@@ -1,13 +1,13 @@
 """
 core/diff.py
 
-results/ qovlugundaki son iki scan_*.json faylini goturub muqayise edir:
-  - yeni yaranan tapintilar (previous-da yox, latest-de var)
-  - hell olunan tapintilar (previous-da var, latest-de yox)
-  - score deyisimi
+Takes the last two scan_*.json files in the results/ folder and compares them:
+  - new findings (absent in previous, present in latest)
+  - resolved findings (present in previous, absent in latest)
+  - score change
 
-Bu, ScoutSuite/Prowler kimi statik alətlərdə olmayan, layihenin ozune
-mexsus hissesidir - tek defelik "snapshot" deyil, zaman icinde trend gosterir.
+This is the part unique to this project, missing from static tools like
+ScoutSuite/Prowler - not a one-off "snapshot", but a trend over time.
 """
 
 from core.history import list_scan_files, load_scan as _load_scan
@@ -16,19 +16,19 @@ from core.scoring import calculate_scores
 
 def _finding_key(finding: dict) -> tuple:
     """
-    Iki fərqli scan-da eyni tapintini tanimaq ucun unikal acar.
-    (category, resource, check) uckuluyu kifayetdir - eyni resursda eyni
-    check her scan-da eyni acari verecek.
+    Unique key to recognise the same finding across two different scans.
+    The (category, resource, check) triple is enough - the same check on the
+    same resource yields the same key in every scan.
     """
     return (finding["category"], finding["resource"], finding["check"])
 
 
 def compare_last_two_scans() -> dict | None:
     """
-    Son iki skani muqayise edir. Eger 2-den az skan varsa None qaytarir -
-    muqayise etmek ucun en azi 2 scan lazimdir.
+    Compares the last two scans. Returns None if there are fewer than 2 scans -
+    at least 2 scans are needed for a comparison.
 
-    Qaytarilan format:
+    Returned format:
     {
         "previous_time": "...",
         "latest_time": "...",
@@ -72,8 +72,8 @@ def compare_last_two_scans() -> dict | None:
 
 def score_history() -> list[dict]:
     """
-    Butun skanlar boyu score trendini qaytarir - Streamlit-de line chart
-    ucun istifade olunur: [{"time": "...", "score": 62}, ...]
+    Returns the score trend across all scans - used for the line chart
+    in Streamlit: [{"time": "...", "score": 62}, ...]
     """
     history = []
     for file_path in list_scan_files():

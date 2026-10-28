@@ -1,92 +1,92 @@
 """
 core/remediation.py
 
-Hər check ID-si üçün "necə düzəldilir" məsləhəti və (mümkünsə) konkret
-Azure CLI/pip əmrini saxlayır. Bilərəkdən finding dict-inin özünə yazılmır -
-göstərmə zamanı (`app.py`-dan) `get_remediation()` ilə lookup edilir, ona
-görə köhnə saxlanmış `results/scan_*.json` faylları da retroaktiv əhatə
-olunur.
+Stores "how to fix" advice and (where possible) a concrete Azure CLI/pip
+command for each check ID. Deliberately not written into the finding dict -
+it is looked up at display time (from `app.py`) via `get_remediation()`, so
+older saved `results/scan_*.json` files are covered retroactively
+as well.
 """
 
 REMEDIATION = {
     "public_blob_access": {
-        "advice": "Storage Account-da Public Blob Access-i deaktiv edin - "
-                  "container-lər yalnız Shared Access Signature (SAS) və ya "
-                  "autentifikasiya ilə əlçatan olsun.",
+        "advice": "Disable Public Blob Access on the Storage Account - "
+                  "containers should be reachable only via Shared Access Signature (SAS) or "
+                  "authentication.",
         "command": "az storage account update --name {resource} "
                    "--resource-group {resource_group} "
                    "--allow-blob-public-access false",
     },
     "secure_transfer": {
-        "advice": "Secure Transfer (HTTPS-only) məcburi edin ki, trafik "
-                  "açıq (şifrəsiz) kanalla getməsin.",
+        "advice": "Enforce Secure Transfer (HTTPS-only) so that traffic "
+                  "never travels over an unencrypted channel.",
         "command": "az storage account update --name {resource} "
                    "--resource-group {resource_group} "
                    "--https-only true",
     },
     "minimum_tls_version": {
-        "advice": "Storage Account-un minimum TLS versiyasını 1.2-yə qaldırın - "
-                  "TLS 1.0/1.1 köhnəlmiş sayılır və bilinən zəiflikləri var.",
+        "advice": "Raise the Storage Account minimum TLS version to 1.2 - "
+                  "TLS 1.0/1.1 are deprecated and have known weaknesses.",
         "command": "az storage account update --name {resource} "
                    "--resource-group {resource_group} "
                    "--min-tls-version TLS1_2",
     },
     "disk_cmk_encryption": {
-        "advice": "Disk-ləri Customer Managed Key (CMK) ilə şifrələyin - "
-                  "əvvəlcə Disk Encryption Set yaradın, sonra onu disk-ə "
-                  "bağlayın. (Disk artıq platform açarı ilə şifrəlidir, CMK "
-                  "açar idarəsini sizə verir.)",
+        "advice": "Encrypt disks with a Customer Managed Key (CMK) - "
+                  "first create a Disk Encryption Set, then attach it to the "
+                  "disk. (The disk is already encrypted with a platform key; CMK "
+                  "gives you control over key management.)",
         "command": "az vm encryption enable --name {resource} "
                    "--resource-group {resource_group} "
                    "--disk-encryption-keyvault <keyvault-name>",
     },
     "vm_public_ip": {
-        "advice": "VM-i birbaşa internetə açmayın - public IP-ni silin və girişi "
-                  "Azure Bastion, VPN və ya Load Balancer/NAT Gateway üzərindən "
-                  "təşkil edin.",
+        "advice": "Do not expose the VM directly to the internet - remove the "
+                  "public IP and route access through Azure Bastion, VPN or a "
+                  "Load Balancer/NAT Gateway.",
         "command": "az network nic ip-config update --name <ipconfig-name> "
                    "--nic-name <nic-name> --resource-group {resource_group} "
                    "--remove publicIpAddress",
     },
     "open_management_port": {
-        "advice": "NSG qaydasını silin və ya source-u konkret etibarlı "
-                  "IP/CIDR-ə məhdudlaşdırın - idarəetmə portlarına birbaşa "
-                  "internetdən deyil, Azure Bastion/VPN üzərindən girin.",
+        "advice": "Delete the NSG rule or restrict the source to a specific trusted "
+                  "IP/CIDR - reach management ports via Azure Bastion/VPN, "
+                  "not directly from the internet.",
         "command": "az network nsg rule update --nsg-name {resource} "
                    "--resource-group {resource_group} "
                    "--name <rule-name> --source-address-prefixes <trusted-ip>",
     },
     "soft_delete": {
-        "advice": "Key Vault-da Soft Delete-i aktiv edin ki, silinən "
-                  "secret/key/certificate-lar bərpa oluna bilsin.",
+        "advice": "Enable Soft Delete on the Key Vault so that deleted "
+                  "secrets/keys/certificates can be recovered.",
         "command": "az keyvault update --name {resource} "
                    "--resource-group {resource_group} "
                    "--enable-soft-delete true",
     },
     "purge_protection": {
-        "advice": "Purge Protection-ı aktiv edin ki, vault saxlama müddəti "
-                  "bitmədən həmişəlik silinə bilməsin.",
+        "advice": "Enable Purge Protection so the vault cannot be permanently "
+                  "deleted before the retention period ends.",
         "command": "az keyvault update --name {resource} "
                    "--resource-group {resource_group} "
                    "--enable-purge-protection true",
     },
     "known_vulnerability": {
-        "advice": "Paketi OSV.dev-in bildirdiyi düzəliş versiyasına (və ya "
-                  "daha yenisinə) yüksəldin, sonra requirements.lock.txt-i "
-                  "yenidən yaradın (`pip freeze > requirements.lock.txt`).",
+        "advice": "Upgrade the package to the fixed version reported by OSV.dev (or "
+                  "newer), then regenerate requirements.lock.txt "
+                  "(`pip freeze > requirements.lock.txt`).",
         "command": "pip install --upgrade {resource}",
     },
 }
 
-DEFAULT_ADVICE = "Bu check üçün konkret remediation təklifi hələ yazılmayıb."
+DEFAULT_ADVICE = "No specific remediation advice has been written for this check yet."
 
 
 def get_remediation(finding: dict) -> dict:
     """
-    Bir finding üçün remediation mətnini + (varsa) hazır əmri qaytarır.
-    `{resource}`/`{resource_group}` placeholder-ləri finding-in öz
-    sahələri ilə əvəz olunur. Naməlum check ID-si üçün defolt mətn
-    qaytarılır - xəta atmır ki, köhnə/naməlum check-lər UI-ni sındırmasın.
+    Returns the remediation text + (if any) a ready-made command for a finding.
+    `{resource}`/`{resource_group}` placeholders are replaced with the finding's
+    own fields. For an unknown check ID a default text is
+    returned - it does not raise, so old/unknown checks don't break the UI.
     """
     check_id = finding.get("check")
     entry = REMEDIATION.get(check_id)
@@ -98,7 +98,7 @@ def get_remediation(finding: dict) -> dict:
     resource_group = finding.get("resource_group", "<resource-group>")
 
     if check_id == "known_vulnerability":
-        # resource "paket==versiya" formatındadır - pip install ucun sade paket adi lazimdir
+        # resource is in "package==version" format - pip install needs the bare package name
         resource = resource.split("==")[0]
 
     command = entry["command"].format(resource=resource, resource_group=resource_group)

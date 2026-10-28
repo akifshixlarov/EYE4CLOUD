@@ -1,10 +1,10 @@
 """
 ui/export.py
 
-Tapıntıların və skan nəticələrinin müxtəlif formatlarda eksportu:
+Export of findings and scan results in several formats:
 - CSV
 - JSON
-- Standalone HTML Report (modern, offline oxuna bilən təhlükəsizlik hesabatı)
+- Standalone HTML Report (modern security report that can be read offline)
 """
 
 import html
@@ -13,7 +13,7 @@ import pandas as pd
 
 
 def export_csv(findings: list[dict]) -> str:
-    """Tapıntıları CSV formatında string kimi qaytarır."""
+    """Returns the findings as a CSV string."""
     if not findings:
         return ""
     df = pd.DataFrame(findings)
@@ -21,8 +21,8 @@ def export_csv(findings: list[dict]) -> str:
 
 
 def export_json(scan_data: dict) -> str:
-    """Skan məlumatını təmiz JSON kimi qaytarır (heç bir credential ehtiva etmir)."""
-    # Təhlükəsizlik: yalnız icazə verilən açarları serializasiya edirik
+    """Returns the scan data as clean JSON (contains no credentials)."""
+    # Security: only serialize the allowed keys
     safe_data = {
         "scan_time": scan_data.get("scan_time"),
         "subscription_ids": scan_data.get("subscription_ids", []),
@@ -34,8 +34,8 @@ def export_json(scan_data: dict) -> str:
 
 def export_html_report(scan_data: dict, scores: dict) -> str:
     """
-    Özündə bütün CSS və formatlamanı saxlayan standalone HTML hesabatı.
-    İnternet bağlantısı olmadan da açılır və rahat çap/paylaşım üçün idealdır.
+    Standalone HTML report that embeds all CSS and formatting.
+    Opens without an internet connection and is ideal for printing/sharing.
     """
     scan_time = scan_data.get("scan_time", "N/A")
     subs = ", ".join(scan_data.get("subscription_ids", ["—"]))
@@ -44,16 +44,16 @@ def export_html_report(scan_data: dict, scores: dict) -> str:
     sev_counts = scores.get("findings_by_severity", {"High": 0, "Medium": 0, "Low": 0})
 
     if overall_score >= 80:
-        score_badge = '<span class="score-badge score-good">Əla (80-100)</span>'
+        score_badge = '<span class="score-badge score-good">Excellent (80-100)</span>'
         score_color = "#10b981"
     elif overall_score >= 50:
-        score_badge = '<span class="score-badge score-warning">Diqqət (50-79)</span>'
+        score_badge = '<span class="score-badge score-warning">Attention (50-79)</span>'
         score_color = "#f59e0b"
     else:
-        score_badge = '<span class="score-badge score-danger">Kritik (0-49)</span>'
+        score_badge = '<span class="score-badge score-danger">Critical (0-49)</span>'
         score_color = "#ef4444"
 
-    # Cədvəl sətirləri
+    # Table rows
     rows_html = []
     for f in findings:
         sev = html.escape(str(f.get("severity", "Low")))
@@ -76,10 +76,10 @@ def export_html_report(scan_data: dict, scores: dict) -> str:
         </tr>
         """)
 
-    rows_joined = "\n".join(rows_html) if rows_html else "<tr><td colspan='6' class='text-center'>Heç bir tapıntı yoxdur.</td></tr>"
+    rows_joined = "\n".join(rows_html) if rows_html else "<tr><td colspan='6' class='text-center'>No findings.</td></tr>"
 
     html_content = f"""<!DOCTYPE html>
-<html lang="az">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -229,8 +229,8 @@ def export_html_report(scan_data: dict, scores: dict) -> str:
                 <div class="meta">Azure Cloud Security Posture Management (CSPM) Snapshot</div>
             </div>
             <div style="text-align: right;">
-                <div class="meta">Skan tarixi: <strong>{scan_time}</strong></div>
-                <div class="meta">Subscription(lar): <strong>{subs}</strong></div>
+                <div class="meta">Scan time: <strong>{scan_time}</strong></div>
+                <div class="meta">Subscription(s): <strong>{subs}</strong></div>
             </div>
         </div>
 
@@ -240,7 +240,7 @@ def export_html_report(scan_data: dict, scores: dict) -> str:
                 <div class="kpi-value score-box">{overall_score}/100</div>
             </div>
             <div class="kpi-card">
-                <div class="kpi-title">Ümumi Tapıntı</div>
+                <div class="kpi-title">Total Findings</div>
                 <div class="kpi-value">{len(findings)}</div>
             </div>
             <div class="kpi-card">
@@ -253,16 +253,16 @@ def export_html_report(scan_data: dict, scores: dict) -> str:
             </div>
         </div>
 
-        <h2 style="font-size: 18px; margin-bottom: 15px;">🔍 Təhlükəsizlik Tapıntıları</h2>
+        <h2 style="font-size: 18px; margin-bottom: 15px;">🔍 Security Findings</h2>
         <table>
             <thead>
                 <tr>
                     <th style="width: 80px;">Severity</th>
-                    <th>Resurs & Qrup</th>
-                    <th>Kateqoriya</th>
-                    <th>Yoxlama</th>
-                    <th>Təsvir / Xəta</th>
-                    <th>Uyğunluq</th>
+                    <th>Resource & Group</th>
+                    <th>Category</th>
+                    <th>Check</th>
+                    <th>Description / Issue</th>
+                    <th>Compliance</th>
                 </tr>
             </thead>
             <tbody>
@@ -271,7 +271,7 @@ def export_html_report(scan_data: dict, scores: dict) -> str:
         </table>
 
         <div class="footer">
-            EYE4CLOUD Avtomatlaşdırılmış Azure Misconfiguration Scanner &bull; Yalnız Oxuma (Read-Only) Rejimi
+            EYE4CLOUD Automated Azure Misconfiguration Scanner &bull; Read-Only Mode
         </div>
     </div>
 </body>

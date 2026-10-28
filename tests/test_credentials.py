@@ -1,12 +1,12 @@
 """
 tests/test_credentials.py
 
-İctimai (Public Mode) və Təhlükəsizlik Testləri:
-1. İki simulyasiya edilmiş sessiya: A-nın credential-ları B tərəfindən istifadə olunmur; B A-nın tapıntılarını görmür.
-2. PUBLIC_MODE aktiv olduqda server .env credential-ları tamamilə inkar edilir.
-3. Canary secret heç vaxt log-da, xətalarda, eksportlarda və ya results/ qovluğunda görünmür.
-4. GUID və input validasiyası qeyri-qanuni daxiletmələri rədd edir.
-5. Rate limiter və hərəkətsizlik taymautu düzgün işləyir.
+Public Mode and security tests:
+1. Two simulated sessions: A's credentials are not used by B; B does not see A's findings.
+2. With PUBLIC_MODE enabled, server .env credentials are fully rejected.
+3. The canary secret never appears in logs, errors, exports or the results/ folder.
+4. GUID and input validation rejects illegal input.
+5. The rate limiter and inactivity timeout work correctly.
 """
 
 import json
@@ -46,7 +46,7 @@ VALID_SUB_2 = "44444444-4444-4444-4444-444444444444"
 
 @pytest.fixture
 def clean_env(monkeypatch):
-    """PUBLIC_MODE və Azure mühit dəyişənlərini idarə etmək üçün fixture."""
+    """Fixture to control PUBLIC_MODE and Azure environment variables."""
     monkeypatch.delenv("PUBLIC_MODE", raising=False)
     monkeypatch.delenv("AZURE_TENANT_ID", raising=False)
     monkeypatch.delenv("AZURE_CLIENT_ID", raising=False)
@@ -56,17 +56,17 @@ def clean_env(monkeypatch):
 
 
 # ============================================================================
-# 1. İKİ SESSİYA ARASINDA TƏCRİD (SESSION ISOLATION)
+# 1. SESSION ISOLATION BETWEEN TWO SESSIONS
 # ============================================================================
 def test_two_simulated_sessions_isolation(monkeypatch):
     """
-    Sessiya A və Sessiya B eyni process daxilində tamamilə təcrid olunmalıdır:
-    - A-nın credential-ları heç vaxt B-yə ötürülmür.
-    - B heç vaxt A-nın tapıntılarını və skanlarını görmür.
+    Session A and Session B must be fully isolated within the same process:
+    - A's credentials are never passed to B.
+    - B never sees A's findings or scans.
     """
     monkeypatch.setenv("PUBLIC_MODE", "true")
 
-    # Sessiya A
+    # Session A
     session_a_id = "user_session_aaa"
     session_a_creds = {
         "tenant_id": VALID_TENANT,
@@ -76,16 +76,16 @@ def test_two_simulated_sessions_isolation(monkeypatch):
     }
     session_a_scans = []
 
-    # Sessiya B
+    # Session B
     session_b_id = "user_session_bbb"
     session_b_creds = None
     session_b_scans = []
 
-    # 1. B credential ötürmədikdə, A-nın credential-ları ona sızmamalıdır
+    # 1. When B passes no credentials, A's credentials must not leak to it
     with pytest.raises(PermissionError):
         get_clients(VALID_SUB_1, credentials=session_b_creds)
 
-    # 2. A skan aparır (mock SDK ilə)
+    # 2. A runs a scan (with a mocked SDK)
     mock_storage = MagicMock(return_value=[{"category": "Storage Account", "resource": "a_only_storage", "check": "HTTPS", "severity": "High"}])
     mock_definitions = [("Storage Accounts", mock_storage)]
 
@@ -107,17 +107,17 @@ def test_two_simulated_sessions_isolation(monkeypatch):
     assert len(session_a_scans) == 1
     assert session_a_scans[0]["findings"][0]["resource"] == "a_only_storage"
 
-    # 3. Sessiya B öz skan siyahısını yoxlayır
+    # 3. Session B checks its own scan list
     scans_for_b = list_session_scans(session_b_id, session_scans_store=session_b_scans)
-    assert len(scans_for_b) == 0  # B A-nın skanını QƏTİYYƏN görmür
+    assert len(scans_for_b) == 0  # B must NEVER see A's scan
 
 
 # ============================================================================
-# 2. PUBLIC_MODE SERVER DƏYƏRLƏRİNİ İNKAR EDİR
+# 2. PUBLIC_MODE REJECTS SERVER VALUES
 # ============================================================================
 def test_public_mode_blocks_server_env_credentials(monkeypatch):
     """
-    PUBLIC_MODE=true olduqda serverdəki .env credential-ları və az cli rədd edilməlidir.
+    With PUBLIC_MODE=true, server .env credentials and az cli must be rejected.
     """
     monkeypatch.setenv("PUBLIC_MODE", "true")
     monkeypatch.setenv("AZURE_TENANT_ID", "server-tenant")
@@ -126,16 +126,16 @@ def test_public_mode_blocks_server_env_credentials(monkeypatch):
     monkeypatch.delenv("AZURE_SUBSCRIPTION_ID", raising=False)
 
     assert is_public_mode() is True
-    # Server credential-larının olması inkar edilməlidir
+    # Server credentials must be reported as absent
     assert has_env_credentials() is False
     assert get_credential_source() == "none"
 
-    # Ziyarətçi credentials ötürmədən get_clients çağırarsa PermissionError almalıdır
+    # A visitor calling get_clients without credentials must get PermissionError
     with pytest.raises(PermissionError) as exc_info:
         get_clients("sub-123", credentials=None)
-    assert "Açıq (Public) rejimdə server credential-larının istifadəsi qadağandır" in str(exc_info.value)
+    assert "Using server credentials is forbidden in Public mode" in str(exc_info.value)
 
-    # run_scan də credentials olmadan PermissionError verməlidir
+    # run_scan must also raise PermissionError without credentials
     with pytest.raises(PermissionError):
         run_scan(credentials=None)
 
@@ -145,7 +145,7 @@ def test_public_mode_blocks_server_env_credentials(monkeypatch):
 # ============================================================================
 def test_canary_secret_never_in_logs_exports_or_disk(tmp_path, monkeypatch, caplog):
     """
-    Canary secret stringi heç vaxt diskə, results/ qovluğuna, log-a və ya eksporta düşməməlidir.
+    The canary secret string must never end up on disk, in results/, in logs or in exports.
     """
     monkeypatch.setenv("PUBLIC_MODE", "true")
 
@@ -169,7 +169,7 @@ def test_canary_secret_never_in_logs_exports_or_disk(tmp_path, monkeypatch, capl
     }
     scores = {"overall": 70, "findings_by_severity": {"High": 1, "Medium": 0, "Low": 0}}
 
-    # 1. Eksport yoxlanışı
+    # 1. Export check
     json_export = export_json(sample_scan)
     assert CANARY_SECRET not in json_export
 
@@ -179,7 +179,7 @@ def test_canary_secret_never_in_logs_exports_or_disk(tmp_path, monkeypatch, capl
     csv_export = export_csv(sample_scan["findings"])
     assert CANARY_SECRET not in csv_export
 
-    # 2. Xəta mesajında maskalanma
+    # 2. Masking in error messages
     creds = {
         "tenant_id": VALID_TENANT,
         "client_id": VALID_CLIENT,
@@ -196,11 +196,11 @@ def test_canary_secret_never_in_logs_exports_or_disk(tmp_path, monkeypatch, capl
     assert CANARY_SECRET not in msg
     assert CANARY_SECRET not in caplog.text
 
-    # 3. Public rejimdə results/ qovluğuna heç bir fayl yazılmamalıdır
+    # 3. In public mode no file may be written to results/
     files_created = list(tmp_path.glob("*"))
     assert len(files_created) == 0
 
-    # 4. Redact funksiyası
+    # 4. Redact function
     raw_error = f"Error communicating with Entra: secret was {CANARY_SECRET}"
     redacted = redact(raw_error, [CANARY_SECRET])
     assert CANARY_SECRET not in redacted
@@ -208,77 +208,77 @@ def test_canary_secret_never_in_logs_exports_or_disk(tmp_path, monkeypatch, capl
 
 
 # ============================================================================
-# 4. STRICT GUID VƏ INPUT VALİDASİYASI
+# 4. STRICT GUID AND INPUT VALIDATION
 # ============================================================================
 def test_strict_guid_and_input_validation():
-    """GUID və input sahələri sərt qaydalara riayət etməlidir."""
-    # Etibarlı GUID
+    """GUID and input fields must follow strict rules."""
+    # Valid GUID
     ok, err = validate_guid(VALID_TENANT, "Tenant ID")
     assert ok is True
     assert err == ""
 
-    # Qeyri-qanuni simvol və ya format (qısa)
+    # Illegal characters or format (too short)
     ok, err = validate_guid("not-a-guid-at-all", "Tenant ID")
     assert ok is False
-    assert "uzunluğu 36" in err
+    assert "36 characters" in err
 
-    # 36 simvollu amma formatı səhv olan GUID
+    # 36-character GUID with the wrong format
     ok, err = validate_guid("11111111-1111-1111-1111-not-a-guid-!", "Tenant ID")
     assert ok is False
-    assert "formatında" in err
+    assert "valid GUID" in err
 
-    # SQL inyeksiya və ya həddən artıq uzunluq
+    # SQL injection or excessive length
     ok, err = validate_guid("11111111-1111-1111-1111-111111111111'; DROP TABLE users;--", "Tenant ID")
     assert ok is False
 
-    # Tam form yoxlanışı: 3-dən çox subscription
+    # Full form check: more than 3 subscriptions
     too_many_subs = f"{VALID_SUB_1}, {VALID_SUB_2}, 55555555-5555-5555-5555-555555555555, 66666666-6666-6666-6666-666666666666"
     ok, err, _ = validate_credentials_input(VALID_TENANT, VALID_CLIENT, "ValidSecret123!", too_many_subs)
     assert ok is False
-    assert "ən çox 3" in err
+    assert "At most 3" in err
 
-    # Qısa secret
+    # Short secret
     ok, err, _ = validate_credentials_input(VALID_TENANT, VALID_CLIENT, "short", VALID_SUB_1)
     assert ok is False
-    assert "8 ilə 128" in err
+    assert "between 8 and 128" in err
 
-    # Uğurlu hal
+    # Success case
     ok, err, clean = validate_credentials_input(VALID_TENANT, VALID_CLIENT, "MySecureSecret_456!", f"{VALID_SUB_1}, {VALID_SUB_2}")
     assert ok is True
     assert len(clean["subscription_ids"]) == 2
 
 
 # ============================================================================
-# 5. RATE LIMITER VƏ INACTIVITY TIMEOUT
+# 5. RATE LIMITER AND INACTIVITY TIMEOUT
 # ============================================================================
 def test_rate_limiter_and_inactivity_timeout():
-    """Rate limiter və hərəkətsizlik taymautunun işləməsi."""
+    """Rate limiter and inactivity timeout behaviour."""
     rate_store = {}
 
-    # 5 dəfəyə qədər icazə verilir
+    # Allowed up to 5 times
     for i in range(5):
         allowed, _ = check_rate_limit(rate_store, "test_conn", max_count=5, window_seconds=60)
         assert allowed is True
 
-    # 6-cı cəhd rədd edilməlidir
+    # The 6th attempt must be rejected
     allowed, msg = check_rate_limit(rate_store, "test_conn", max_count=5, window_seconds=60)
     assert allowed is False
-    assert "Sorğu limiti aşıldı" in msg
+    assert "Rate limit exceeded" in msg
 
-    # Hərəkətsizlik taymautu
+    # Inactivity timeout
     mock_session = {
         "azure_creds": {"client_secret": CANARY_SECRET},
         "input_client_secret": CANARY_SECRET,
         "_last_activity_ts": time.time() - (INACTIVITY_TIMEOUT_SECONDS + 10),
     }
 
-    # Yoxlayırıq: 15 dəqiqədən çox keçibsə sirlər silinməlidir
+    # Check: secrets must be wiped after more than 15 minutes
     timed_out = check_inactivity(mock_session)
     assert timed_out is True
     assert mock_session["azure_creds"] is None
     assert "input_client_secret" not in mock_session
 
-    # wipe_session_credentials yoxlanışı
+    # wipe_session_credentials check
     active_session = {
         "azure_creds": {"client_secret": "my-secret"},
         "input_client_secret": "my-secret",
@@ -291,10 +291,34 @@ def test_rate_limiter_and_inactivity_timeout():
 
 
 def test_redact_utility():
-    """redact() funksiyası token, sirr və şübhəli parametrləri gizlədir."""
+    """redact() hides tokens, secrets and suspicious parameters."""
     secret = "SuperSecretVal123"
     msg = f"Failed to authenticate with secret={secret} and Bearer eyJhbGciOiJIUzI1NiJ9.test.sig"
     cleaned = redact(msg, [secret])
     assert secret not in cleaned
     assert "[REDACTED_SECRET]" in cleaned
     assert "eyJ" not in cleaned
+
+
+def test_device_code_credential_used_in_public_mode(clean_env, monkeypatch):
+    """'Sign in with Microsoft' session: the ready credential is used directly, no secret required."""
+    monkeypatch.setenv("PUBLIC_MODE", "true")
+    fake_cred = MagicMock()
+    creds = {"credential": fake_cred, "subscription_ids": [VALID_SUB_1]}
+
+    clients = get_clients(credentials=creds)
+    assert clients.subscription_id == VALID_SUB_1
+    assert list_subscription_ids(creds) == [VALID_SUB_1]
+
+    session = {"azure_creds": creds, "input_dc_sub_ids": VALID_SUB_1}
+    wipe_session_credentials(session)
+    assert session["azure_creds"] is None
+    assert "input_dc_sub_ids" not in session
+
+
+def test_validate_subscription_ids():
+    from core.security import validate_subscription_ids
+
+    assert validate_subscription_ids(f"{VALID_SUB_1}, {VALID_SUB_2}") == (True, "", [VALID_SUB_1, VALID_SUB_2])
+    assert validate_subscription_ids("")[0] is False
+    assert validate_subscription_ids("not-a-guid")[0] is False
