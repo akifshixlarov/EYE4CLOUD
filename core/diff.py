@@ -43,11 +43,13 @@ def compare_last_two_scans() -> dict | None:
     if len(scan_files) < 2:
         return None
 
-    previous = _load_scan(scan_files[-2])
-    latest = _load_scan(scan_files[-1])
+    return diff_scans(_load_scan(scan_files[-2]), _load_scan(scan_files[-1]))
 
-    previous_keys = {_finding_key(f): f for f in previous["findings"]}
-    latest_keys = {_finding_key(f): f for f in latest["findings"]}
+
+def diff_scans(previous: dict, latest: dict) -> dict:
+    """Compares two scan dicts (same format as compare_last_two_scans returns)."""
+    previous_keys = {_finding_key(f): f for f in previous.get("findings", [])}
+    latest_keys = {_finding_key(f): f for f in latest.get("findings", [])}
 
     new_findings = [
         f for key, f in latest_keys.items() if key not in previous_keys
@@ -56,12 +58,12 @@ def compare_last_two_scans() -> dict | None:
         f for key, f in previous_keys.items() if key not in latest_keys
     ]
 
-    previous_score = calculate_scores(previous["findings"])["overall"]
-    latest_score = calculate_scores(latest["findings"])["overall"]
+    previous_score = calculate_scores(previous.get("findings", []))["overall"]
+    latest_score = calculate_scores(latest.get("findings", []))["overall"]
 
     return {
-        "previous_time": previous["scan_time"],
-        "latest_time": latest["scan_time"],
+        "previous_time": previous.get("scan_time", ""),
+        "latest_time": latest.get("scan_time", ""),
         "previous_score": previous_score,
         "latest_score": latest_score,
         "score_change": latest_score - previous_score,

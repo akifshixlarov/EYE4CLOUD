@@ -57,8 +57,6 @@ def calculate_scores(findings: list[dict], accepted_keys: set | None = None) -> 
 
     categories = {f["category"] for f in active_findings}
     # Even if findings are empty, show the standard Azure categories at 100
-    # (Dependency is not here - it is an optional check and
-    # doesn't run at all without requirements.lock.txt)
     all_categories = {
         "Storage Account",
         "Network Security Group",

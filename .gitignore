@@ -11,7 +11,6 @@ logs/
 venv/
 .venv/
 env/
-requirements.lock.txt
 
 # --- Python ---
 __pycache__/

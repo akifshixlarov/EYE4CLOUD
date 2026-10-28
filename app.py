@@ -20,8 +20,10 @@ from core.remediation import get_remediation
 from core.exceptions import accept_risk, revoke_acceptance, list_accepted_risks, accepted_keys_set
 from core.history import delete_scan, clear_history
 from core.security import is_public_mode, redact
+from core.scheduler import start_scheduler
 
 from ui.auth_panel import init_session_state, render_connect_panel
+from ui.automation_panel import render_automation_panel
 from ui.scanner_runner import execute_parallel_scan
 from ui.charts import get_gauge_chart, get_severity_donut, get_category_bar, get_trend_chart
 from ui.export import export_csv, export_json, export_html_report
@@ -45,6 +47,16 @@ session_scans_store = st.session_state["session_scans"]
 accepted_store = st.session_state["accepted_risks_store"]
 
 SEVERITY_ORDER = {"High": 0, "Medium": 1, "Low": 2}
+
+
+@st.cache_resource
+def _scheduler_thread():
+    # cache_resource = one background scheduler per server process, not per session
+    return start_scheduler()
+
+
+if not public_mode:
+    _scheduler_thread()
 
 
 def _score_color(score: int) -> str:
@@ -122,6 +134,12 @@ with st.sidebar:
                 except Exception as e:
                     logging.exception("Unexpected error during scan: %s", redact(str(e)))
                     st.error("An error occurred during the scan. Technical details were safely written to the server log.")
+
+        # Scheduling and notifications need server credentials and disk - local mode only
+        if not public_mode:
+            st.divider()
+            st.subheader("🤖 Automation")
+            render_automation_panel()
     else:
         st.info("💡 **Demo mode is active.** No Azure connection required; realistic sample data is shown.")
         if st.button("🔄 Refresh demo data", width="stretch"):
@@ -180,7 +198,7 @@ if not available_scans:
         <div style="background-color: #151a21; border: 1px solid #272f3d; border-radius: 10px; padding: 30px; text-align: center; margin-top: 20px;">
             <h2 style="color: #2dd4bf; margin-bottom: 10px;">No scans yet</h2>
             <p style="color: #94a3b8; max-width: 600px; margin: 0 auto 20px auto;">
-                To check the security posture of your Azure environment (Storage, NSG, Key Vault, VM, Dependencies),
+                To check the security posture of your Azure environment (Storage, NSG, Key Vault, VM),
                 connect to Azure from the left panel and click <strong>"Start new scan"</strong>,
                 or turn on <strong>"Demo Mode"</strong> to explore sample data.
             </p>
@@ -228,11 +246,11 @@ with col_meta:
 
 st.markdown("---")
 
+# Older saved scans may still contain "Dependency" findings - that check was removed
 azure_findings = [f for f in selected_scan.get("findings", []) if f.get("category") != "Dependency"]
-dependency_findings = [f for f in selected_scan.get("findings", []) if f.get("category") == "Dependency"]
 
-tab_overview, tab_findings, tab_history, tab_deps, tab_accepted = st.tabs(
-    ["📊 Overview", "🔍 Findings", "📂 History", "📦 Dependencies", "✅ Accepted Risks"]
+tab_overview, tab_findings, tab_history, tab_accepted = st.tabs(
+    ["📊 Overview", "🔍 Findings", "📂 History", "✅ Accepted Risks"]
 )
 
 
@@ -527,45 +545,7 @@ with tab_history:
 
 
 # ============================================================================
-# TAB 4: DEPENDENCIES
-# ============================================================================
-with tab_deps:
-    st.subheader("📦 Dependency & Library Security (PyPI CVE)")
-    if dependency_findings:
-        df_dep = pd.DataFrame(dependency_findings)
-        df_dep["_sort"] = df_dep["severity"].map(SEVERITY_ORDER)
-        df_dep = df_dep.sort_values("_sort").drop(columns="_sort")
-
-        st.dataframe(
-            df_dep.style.apply(_severity_style, axis=1),
-            width="stretch",
-            hide_index=True,
-        )
-
-        csv_dep = export_csv(dependency_findings)
-        st.download_button(
-            "📥 Download dependencies CSV",
-            csv_dep,
-            "dependency_findings.csv",
-            "text/csv",
-            key="dep_csv_btn",
-            width="stretch",
-        )
-
-        st.markdown("---")
-        st.markdown("#### 🛠️ Security Recommendations")
-        for finding in sorted(dependency_findings, key=lambda f: SEVERITY_ORDER.get(f.get("severity", "Low"), 3)):
-            with st.expander(f"{finding['resource']} — {finding['check']}"):
-                remediation = get_remediation(finding)
-                st.write(remediation["advice"])
-                if remediation.get("command"):
-                    st.code(remediation["command"], language="bash")
-    else:
-        st.caption("No dependency findings — no known CVEs detected.")
-
-
-# ============================================================================
-# TAB 5: ACCEPTED RISKS
+# TAB 4: ACCEPTED RISKS
 # ============================================================================
 with tab_accepted:
     st.subheader("✅ Accepted Risks (Exceptions)")
