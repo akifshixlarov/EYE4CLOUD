@@ -4,6 +4,7 @@ azure-mgmt-network>=25.4.0
 azure-mgmt-keyvault>=10.3.0
 azure-mgmt-compute>=33.0.0
 azure-mgmt-resource>=23.0.0
+azure-mgmt-sql>=4.0.0
 # app.py uses the `width="stretch"` API (instead of the old `use_container_width`)
 # - this floor is the version that API was tested with
 streamlit>=1.63.0

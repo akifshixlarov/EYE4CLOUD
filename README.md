@@ -18,6 +18,16 @@ trend/diff comparison between scans.
 | 6 | Is the minimum TLS version below 1.2? | Storage Account | Medium | 3.15 |
 | 7 | Are disks encrypted with a Customer Managed Key? | Virtual Machine | Medium | 7.2 |
 | 8 | Is the VM attached directly to a public IP? | Virtual Machine | Medium | N/A |
+| 9 | Firewall rule open to every IP (0.0.0.0–255.255.255.255)? | Azure SQL | High | N/A |
+| 10 | "Allow Azure services" firewall rule (0.0.0.0–0.0.0.0)? | Azure SQL | Medium | N/A |
+| 11 | Is public network access enabled? | Azure SQL | Medium | N/A |
+| 12 | Is the minimum TLS version below 1.2? | Azure SQL | Medium | N/A |
+| 13 | Is a Microsoft Entra administrator missing? | Azure SQL | Medium | N/A |
+| 14 | Is server-level auditing disabled? | Azure SQL | Medium | N/A |
+| 15 | Is Transparent Data Encryption disabled (per user database)? | Azure SQL | High | N/A |
+
+"N/A" in the CIS column means either "no CIS control" or "not yet verified
+against the official benchmark" — see `CLAUDE.md`.
 
 Each finding comes with concrete remediation advice (and, where possible, a
 ready-to-use `az cli` command). A user can mark a finding as "accepted risk"
@@ -57,7 +67,8 @@ azure-scanner/
 │   ├── storage_checks.py
 │   ├── nsg_checks.py
 │   ├── keyvault_checks.py
-│   └── vm_checks.py           # disk CMK encryption, direct public IP
+│   ├── vm_checks.py           # disk CMK encryption, direct public IP
+│   └── sql_checks.py          # Azure SQL servers + databases
 ├── ui/                    # Streamlit components (connect panel, automation panel, charts, export, demo data)
 ├── scripts/
 │   ├── scheduled_scan.py  # headless scan (Task Scheduler / cron / CI)
@@ -365,10 +376,13 @@ permission is needed in the tenant).
 ## Limitations
 
 - Only the Reader role at subscription level is needed
-- Currently limited to 4 Azure resource types (Storage, NSG, Key Vault, VM) —
-  to extend it, adding a new module to the `checks/` folder is enough (keeping
-  the same `{"category", "resource", "resource_group", "check", "issue",
-  "severity", "compliance"}` format)
+- Currently limited to 5 Azure resource types (Storage, NSG, Key Vault, VM,
+  Azure SQL) — to extend it, add a module to the `checks/` folder, register it in
+  `CHECK_MODULES` (`core/scanner.py`) and keep the same `{"category", "resource",
+  "resource_group", "check", "issue", "severity", "compliance"}` format
+- If a whole check module fails (no permission, resource provider not
+  registered), the scan continues and the reason is listed in the scan's
+  `errors` field and shown as a warning in the dashboard
 - The score methodology is a simple weighted deduction model, not academic risk
   modelling — the goal is to prioritise findings
 - The VM disk encryption check only looks at Disk Encryption Set (SSE + CMK) —
