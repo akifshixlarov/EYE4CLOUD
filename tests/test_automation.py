@@ -8,6 +8,7 @@ Scheduled scans and Telegram notifications:
 4. Telegram input validation
 """
 
+import os
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
@@ -103,6 +104,7 @@ def test_telegram_notification_from_settings(tmp_settings, caplog):
     assert TOKEN not in caplog.text
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX file permission bits not enforced on Windows")
 def test_settings_file_is_private(tmp_settings):
     settings.update_settings("telegram", bot_token=TOKEN)
     assert (settings.SETTINGS_FILE.stat().st_mode & 0o777) == 0o600
