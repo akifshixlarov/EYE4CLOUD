@@ -1,4 +1,18 @@
-# Azure Misconfiguration Scanner
+# EYE4CLOUD — Azure CSPM Scanner
+
+<p align="center">
+  <img src="assets/logo.png" alt="EYE4CLOUD Logo" width="200"/>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/python-3.11%2B-blue.svg" alt="Python 3.11+"/>
+  <img src="https://img.shields.io/badge/compliance-CIS%20Azure%20v2.1.0-blue" alt="CIS Azure v2.1.0"/>
+  <img src="https://img.shields.io/badge/tests-181%20passed-brightgreen" alt="181 Tests Passing"/>
+  <img src="https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white" alt="GitHub Actions CI"/>
+  <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License"/>
+  <img src="https://img.shields.io/badge/security-hardened-brightgreen" alt="Security Hardened"/>
+  <img src="https://img.shields.io/badge/docker-ready-2496ED?logo=docker&logoColor=white" alt="Docker Ready"/>
+</p>
 
 A lightweight CSPM (Cloud Security Posture Management) tool that looks for the
 most common configuration mistakes in an Azure environment. It runs read-only
