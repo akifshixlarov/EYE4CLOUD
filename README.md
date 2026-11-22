@@ -387,6 +387,8 @@ jobs:
 Microsoft sign-in, so a Service Principal is required (App Registration
 permission is needed in the tenant).
 
+> **Activation on Demand:** The GitHub Actions workflow includes an automated credential check. When Azure secrets are not yet configured in GitHub, the workflow stays cleanly dormant and succeeds with an informational notice rather than failing. To activate automated cloud audits, simply add your Azure Service Principal credentials under **Repository Settings -> Secrets and variables -> Actions**.
+
 ## Limitations
 
 - Only the Reader role at subscription level is needed
