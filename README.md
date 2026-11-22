@@ -9,6 +9,7 @@
   <img src="https://img.shields.io/badge/compliance-CIS%20Azure%20v2.1.0-blue" alt="CIS Azure v2.1.0"/>
   <img src="https://img.shields.io/badge/tests-181%20passed-brightgreen" alt="181 Tests Passing"/>
   <img src="https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white" alt="GitHub Actions CI"/>
+  <img src="https://img.shields.io/badge/audit-Prowler%20Azure-8A2BE2?logo=azure&logoColor=white" alt="Prowler Azure"/>
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License"/>
   <img src="https://img.shields.io/badge/security-hardened-brightgreen" alt="Security Hardened"/>
   <img src="https://img.shields.io/badge/docker-ready-2496ED?logo=docker&logoColor=white" alt="Docker Ready"/>
@@ -388,6 +389,17 @@ Microsoft sign-in, so a Service Principal is required (App Registration
 permission is needed in the tenant).
 
 > **Activation on Demand:** The GitHub Actions workflow includes an automated credential check. When Azure secrets are not yet configured in GitHub, the workflow stays cleanly dormant and succeeds with an informational notice rather than failing. To activate automated cloud audits, simply add your Azure Service Principal credentials under **Repository Settings -> Secrets and variables -> Actions**.
+
+### Automated Prowler Integration (`prowler-scan.yml`)
+
+For comprehensive, industry-standard compliance audits, the repository includes an automated **Prowler** pipeline (`.github/workflows/prowler-scan.yml`) evaluating your Azure environment against the **CIS Azure Benchmark v2.1.0**.
+
+- **Schedule & Manual Run:** Runs weekly on Mondays at 06:00 UTC and can be manually triggered at any time via `workflow_dispatch`.
+- **Activation on Demand:** Uses the same safe pre-flight check. It remains dormant with a green checkmark until Azure credentials (`AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`) are configured in GitHub Secrets.
+- **Downloadable Compliance Reports:** When executed, the workflow bundles full compliance reports into a downloadable zip file under the GitHub Actions **Artifacts** section:
+  - `prowler-output.html` — Interactive visual dashboard for browsers.
+  - `prowler-output.csv` — Spreadsheets for sorting and ticketing.
+  - `prowler-output.json` — Machine-readable OCSF data for SIEM/logging.
 
 ## Limitations
 

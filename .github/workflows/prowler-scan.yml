@@ -1,0 +1,77 @@
+name: Prowler Azure Security Benchmark
+
+on:
+  schedule:
+    # Runs weekly on Mondays at 06:00 UTC
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+    # Allows manual one-click trigger from the GitHub Actions UI
+
+jobs:
+  prowler:
+    name: Run Prowler Security Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify Azure Activation Credentials
+        id: check_auth
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+        run: |
+          if [ -z "$AZURE_CLIENT_ID" ] || [ -z "$AZURE_TENANT_ID" ]; then
+            echo "configured=false" >> $GITHUB_OUTPUT
+            echo "::notice title=Prowler Scan Dormant::Azure credentials are not configured in GitHub Secrets. This workflow is currently dormant. To activate Prowler audits, add AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, and AZURE_TENANT_ID in Settings -> Secrets and variables -> Actions."
+            echo "================================================================================="
+            echo "ℹ️  PROWLER AUDIT STATUS: DORMANT (NOT ACTIVATED)"
+            echo "   To activate automated Prowler CIS scans, configure your Azure secrets:"
+            echo "   - AZURE_CLIENT_ID"
+            echo "   - AZURE_CLIENT_SECRET"
+            echo "   - AZURE_TENANT_ID"
+            echo "   - AZURE_SUBSCRIPTION_ID (optional)"
+            echo "   Under: Repository Settings -> Secrets and variables -> Actions"
+            echo "================================================================================="
+          else
+            echo "configured=true" >> $GITHUB_OUTPUT
+            echo "✅ Azure credentials detected. Proceeding with Prowler scan."
+          fi
+
+      - name: Set up Python 3.11
+        if: steps.check_auth.outputs.configured == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Prowler
+        if: steps.check_auth.outputs.configured == 'true'
+        run: |
+          python -m pip install --upgrade pip
+          pip install prowler
+
+      - name: Execute Prowler Azure CIS Scan
+        if: steps.check_auth.outputs.configured == 'true'
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          mkdir -p prowler-output
+          # Run Prowler with CIS Benchmark against Azure.
+          # `|| true` prevents pipeline failure if Prowler finds compliance violations.
+          prowler azure --sp-env-auth \
+            --compliance cis_2.1_azure \
+            --output-formats html,csv,json-ocsf \
+            --output-directory prowler-output || true
+
+      - name: Upload Prowler Audit Reports
+        if: steps.check_auth.outputs.configured == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: prowler-compliance-report-${{ github.run_id }}
+          path: prowler-output/
+          retention-days: 30
