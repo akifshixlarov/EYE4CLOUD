@@ -10,7 +10,7 @@
   <img src="https://img.shields.io/badge/tests-181%20passed-brightgreen" alt="181 Tests Passing"/>
   <img src="https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white" alt="GitHub Actions CI"/>
   <img src="https://img.shields.io/badge/audit-Prowler%20Azure-8A2BE2?logo=azure&logoColor=white" alt="Prowler Azure"/>
-  <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License"/>
+  <img src="https://img.shields.io/badge/license-Apache--2.0-green.svg" alt="Apache 2.0 License"/>
   <img src="https://img.shields.io/badge/security-hardened-brightgreen" alt="Security Hardened"/>
   <img src="https://img.shields.io/badge/docker-ready-2496ED?logo=docker&logoColor=white" alt="Docker Ready"/>
 </p>
@@ -42,7 +42,7 @@ trend/diff comparison between scans.
 | 15 | Is Transparent Data Encryption disabled (per user database)? | Azure SQL | High | N/A |
 
 "N/A" in the CIS column means either "no CIS control" or "not yet verified
-against the official benchmark" — see `CLAUDE.md`.
+against the official benchmark".
 
 Each finding comes with concrete remediation advice (and, where possible, a
 ready-to-use `az cli` command). A user can mark a finding as "accepted risk"
@@ -417,3 +417,14 @@ For comprehensive, industry-standard compliance audits, the repository includes 
   a VM encrypted with Azure Disk Encryption (ADE) may be wrongly flagged
 - "Sign in with Microsoft" uses the `organizations` endpoint — personal
   Microsoft accounts and guest users may need the Service Principal method
+
+## Documentation
+
+- [Architecture & Design Analysis](docs/ARCHITECTURE.md) — Module breakdown, data flow, and CSPM evolution roadmap.
+- [Security Hardening Audit](docs/SECURITY_AUDIT.md) — Penetration defense report, session isolation trace, and memory-only public mode architecture.
+- [Contributing Guide](CONTRIBUTING.md) — Developer guidelines for adding new checks and running unit tests.
+- [Azerbaijani Documentation](docs/README.az.md) — Layihənin Azərbaycan dilində tam təsviri.
+
+## License
+
+This project is licensed under the **Apache License 2.0** — see the [LICENSE](LICENSE) file for details.

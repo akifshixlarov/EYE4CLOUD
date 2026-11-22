@@ -26,16 +26,18 @@ checks/*.py  -->  core/scanner.py  -->  core/scoring.py + core/diff.py  -->  app
 | | `checks/nsg_checks.py` | 1 check (SSH/RDP from 0.0.0.0/0) |
 | | `checks/keyvault_checks.py` | 2 checks (soft-delete, purge-protection) — uses extra `vaults.get()` per vault because `list_by_subscription()` returns partial properties |
 | | `checks/vm_checks.py` | 2 checks (disk CMK encryption, public IP on VM) |
-| | `checks/dependency_checks.py` | OSV.dev CVE lookup on `requirements.lock.txt` (not Azure, SCA) |
-| **Orchestrator** | `core/scanner.py` | Loops subscriptions, calls all `run_all_*_checks()`, appends `subscription_id` to each finding, saves JSON, sends webhook notification |
+| | `checks/sql_checks.py` | 7 checks (open firewall, Allow Azure services, public network access, TLS, Entra admin, auditing, TDE) |
+| **Orchestrator** | `core/scanner.py` | Loops subscriptions, calls all check modules, records module-level errors, appends `subscription_id`, saves JSON, triggers notifications |
 | **Scoring** | `core/scoring.py` | Weighted-deduction model: 100 - (High x 15 + Medium x 7 + Low x 3), per-category and overall; respects accepted-risk exclusions |
 | **Diff / Trend** | `core/diff.py` | Compares last two scan JSONs via `(category, resource, check)` key; produces new/resolved lists + score delta; `score_history()` for line chart |
 | **History** | `core/history.py` | File-system CRUD on `results/scan_*.json` |
 | **Accepted risks** | `core/exceptions.py` | JSON-backed accept/revoke/list with `(category, resource, check)` key |
 | **Remediation** | `core/remediation.py` | Static dict mapping `check_id` to advice text + templated `az cli` command |
-| **Notifications** | `core/notifications.py` | Teams MessageCard / Slack webhook; failure is swallowed silently |
+| **Scheduler** | `core/scheduler.py` | Background timer scheduler for automated daily or interval scans |
+| **Settings** | `core/settings.py` | Encrypted local configuration store (Telegram bot tokens, schedules) |
+| **Notifications** | `core/notifications.py` | Telegram bot, Teams MessageCard, and Slack webhook alerts |
 | **Dashboard auth** | `core/dashboard_auth.py` | Optional bcrypt password gate via `streamlit-authenticator`; single user, cookie-based |
-| **UI** | `app.py` | 5-tab Streamlit dashboard: Overview, Findings, History, Dependencies, Accepted Risks |
+| **UI** | `app.py` | Streamlit dashboard: Overview, Findings, History, Automation, Accepted Risks |
 | **Scripts** | `scripts/scheduled_scan.py` | Headless scan wrapper for cron/CI |
 | | `scripts/hash_password.py` | bcrypt hash generator for dashboard password |
 
@@ -45,7 +47,7 @@ Every check function returns a `list[dict]`, where each dict has **exactly** the
 
 ```json
 {
-  "category":       "Storage Account | Network Security Group | Key Vault | Virtual Machine | Dependency",
+  "category":       "Storage Account | Network Security Group | Key Vault | Virtual Machine | Azure SQL",
   "resource":       "<resource name or package==version>",
   "resource_group": "<RG name or N/A>",
   "check":          "<unique check ID string>",

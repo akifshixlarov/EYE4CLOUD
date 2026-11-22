@@ -1,6 +1,6 @@
 # Azure Misconfiguration Scanner
 
-> 🌐 *English version: [README.md](README.md)*
+> 🌐 *English version: [README.md](../README.md)*
 
 Azure mühitində ən çox rast gəlinən 4 konfiqurasiya səhvini axtaran, read-only
 (Reader rolu ilə) işləyən yüngül CSPM (Cloud Security Posture Management)
